@@ -52,6 +52,14 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				// AlphaVision Dashboard Colors
+				dashboard: {
+					bg: '#1A1F2C',
+					accent: '#9b87f5',
+					highlight: '#8B5CF6',
+					positive: '#22c55e',
+					negative: '#ef4444',
+				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
