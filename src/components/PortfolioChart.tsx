@@ -130,7 +130,7 @@ export default function PortfolioChart({
             <Tooltip 
               contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#4B5563' }}
               labelStyle={{ color: '#E5E7EB' }}
-              formatter={(value, name) => {
+              formatter={(value: any, name: string) => {
                 // Format breach values
                 if (name.includes('Breach') && value !== null) {
                   return ['VaR Breach', ''];
