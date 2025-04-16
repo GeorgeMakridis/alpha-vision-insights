@@ -50,7 +50,7 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
 
   return (
     <CardGradient className="h-[400px]">
-      <h3 className="text-lg font-medium mb-4">Price, Sentiment & Volume Analysis</h3>
+      <h3 className="text-lg font-medium mb-4">Sentiment & Volume Analysis</h3>
       <div className="h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -87,6 +87,12 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
             <Tooltip 
               contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#4B5563' }}
               labelStyle={{ color: '#E5E7EB' }}
+              formatter={(value: any, name: string) => {
+                if (typeof value === 'number') {
+                  return [value.toFixed(2), name];
+                }
+                return [value, name];
+              }}
             />
             <Legend />
             <Line 
@@ -110,7 +116,7 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
             <Bar 
               yAxisId="volume" 
               dataKey="volume" 
-              name="Volume" 
+              name="News Volume" 
               fill="#3730a3"
               opacity={0.6} 
               barSize={30}

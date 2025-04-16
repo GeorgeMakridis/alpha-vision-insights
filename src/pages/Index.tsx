@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import AssetSelector from "@/components/AssetSelector";
 import AssetInfoCard from "@/components/AssetInfoCard";
 import AssetChart from "@/components/AssetChart";
+import AssetVaRChart from "@/components/AssetVaRChart";
 import VaRMetricsCard from "@/components/VaRMetricsCard";
 import MetricsSummaryCard from "@/components/MetricsSummaryCard";
 import PortfolioAssetSelector from "@/components/PortfolioAssetSelector";
@@ -148,6 +149,8 @@ const Index = () => {
             </div>
             
             <AssetInfoCard ticker={selectedAsset} />
+            
+            <AssetVaRChart ticker={selectedAsset} />
             
             <AssetChart ticker={selectedAsset} />
             
