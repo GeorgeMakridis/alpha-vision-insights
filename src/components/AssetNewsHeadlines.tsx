@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { CardGradient } from "@/components/ui/card-gradient";
 import { mockStocks } from "@/data/mockData";
@@ -49,8 +48,8 @@ export default function AssetNewsHeadlines({ ticker }: AssetNewsHeadlinesProps) 
         `${stock.name} Addresses Challenges in ${stock.sector} Sector`
       ];
       
-      // Generate 10 news items
-      return dates.map((date, index) => {
+      // Generate 5 news items (changed from 10)
+      return dates.slice(0, 5).map((date, index) => {
         const randomSentiment = (Math.random() * 2 - 1) * 0.75; // Between -0.75 and 0.75
         return {
           title: headlines[index],
