@@ -1,7 +1,7 @@
 
 import { CardGradient } from "@/components/ui/card-gradient";
 import { calculatePortfolioPriceHistory } from "@/data/mockData";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Info } from "lucide-react";
 import { useState, useEffect } from "react";
 import { 
   Area, 
@@ -16,6 +16,12 @@ import {
   YAxis,
   ReferenceLine
 } from "recharts";
+import { 
+  Tooltip as UITooltip, 
+  TooltipProvider, 
+  TooltipTrigger, 
+  TooltipContent 
+} from "./ui/tooltip";
 
 interface PortfolioChartProps {
   selectedAssets: string[];
@@ -42,22 +48,27 @@ export default function PortfolioChart({
     // Filter for the specified number of days
     const filteredData = data.slice(-days);
     
-    // Add VaR breach markers - simulate breaches for visualization
+    // Find min price for VaR lines calculation
+    const priceMin = Math.min(...filteredData.map((d: any) => d.price)) * 0.95;
+    
+    // Add VaR breach markers and VaR lines - simulate breaches for visualization
     const enhancedData = filteredData.map((day: any) => {
-      // Simulate VaR breaches based on price movements
-      // In a real system, these would be calculated from actual return data
-      const dailyReturn = day.return || 0;
-      
       return {
         ...day,
-        // A breach occurs when the actual return is worse than the VaR prediction
-        // These values would typically come from comparing actual returns to VaR thresholds
+        // Breach markers
         parametricVaR95Breach: Math.random() > 0.95 ? -1 : null,
         monteCarloVaR95Breach: Math.random() > 0.95 ? -1 : null,
         deepVaR95Breach: Math.random() > 0.96 ? -1 : null,
         parametricVaR99Breach: Math.random() > 0.99 ? -1 : null, 
         monteCarloVaR99Breach: Math.random() > 0.99 ? -1 : null,
-        deepVaR99Breach: Math.random() > 0.99 ? -1 : null
+        deepVaR99Breach: Math.random() > 0.99 ? -1 : null,
+        // VaR threshold lines
+        parametricVaR95Line: priceMin * 1.05,
+        monteCarloVaR95Line: priceMin * 1.04,
+        deepVaR95Line: priceMin * 1.03,
+        parametricVaR99Line: priceMin * 1.02,
+        monteCarloVaR99Line: priceMin * 1.01,
+        deepVaR99Line: priceMin * 1.00
       };
     });
     
@@ -87,7 +98,19 @@ export default function PortfolioChart({
 
   return (
     <CardGradient className="h-[500px]">
-      <h3 className="text-lg font-medium mb-4">Portfolio Performance & VaR Analysis</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-medium">Portfolio Performance & VaR Analysis</h3>
+        <TooltipProvider>
+          <UITooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p>This chart shows portfolio value, sentiment (from -1 to 1), and news volume. Dots indicate VaR breach events, and dashed lines represent VaR thresholds.</p>
+            </TooltipContent>
+          </UITooltip>
+        </TooltipProvider>
+      </div>
       <div className="h-[420px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -132,7 +155,7 @@ export default function PortfolioChart({
               labelStyle={{ color: '#E5E7EB' }}
               formatter={(value: any, name: string) => {
                 // Format breach values
-                if (name.includes('Breach') && value !== null) {
+                if (typeof name === 'string' && name.includes('Breach') && value !== null) {
                   return ['VaR Breach', ''];
                 }
                 if (typeof value === 'number') {
@@ -227,19 +250,59 @@ export default function PortfolioChart({
               dot={{ r: 8, fill: '#06b6d4', stroke: '#ffffff', strokeWidth: 1 }}
             />
             
-            {/* Reference lines for VaR levels */}
-            <ReferenceLine 
-              y={priceMin * 1.05} 
+            {/* VaR lines */}
+            <Line 
               yAxisId="left" 
-              label={{ value: 'VaR 95%', position: 'insideBottomLeft', fill: '#ef4444' }} 
+              type="monotone" 
+              dataKey="parametricVaR95Line" 
+              name="Parametric VaR 95%" 
               stroke="#ef4444" 
+              dot={false}
               strokeDasharray="3 3" 
             />
-            <ReferenceLine 
-              y={priceMin * 1.02} 
+            <Line 
               yAxisId="left" 
-              label={{ value: 'VaR 99%', position: 'insideBottomLeft', fill: '#ec4899' }} 
+              type="monotone" 
+              dataKey="monteCarloVaR95Line" 
+              name="Monte Carlo VaR 95%" 
+              stroke="#f97316" 
+              dot={false}
+              strokeDasharray="3 3" 
+            />
+            <Line 
+              yAxisId="left" 
+              type="monotone" 
+              dataKey="deepVaR95Line" 
+              name="Deep VaR 95%" 
+              stroke="#eab308" 
+              dot={false}
+              strokeDasharray="3 3" 
+            />
+            <Line 
+              yAxisId="left" 
+              type="monotone" 
+              dataKey="parametricVaR99Line" 
+              name="Parametric VaR 99%" 
               stroke="#ec4899" 
+              dot={false}
+              strokeDasharray="3 3" 
+            />
+            <Line 
+              yAxisId="left" 
+              type="monotone" 
+              dataKey="monteCarloVaR99Line" 
+              name="Monte Carlo VaR 99%" 
+              stroke="#8b5cf6" 
+              dot={false}
+              strokeDasharray="3 3" 
+            />
+            <Line 
+              yAxisId="left" 
+              type="monotone" 
+              dataKey="deepVaR99Line" 
+              name="Deep VaR 99%" 
+              stroke="#06b6d4" 
+              dot={false}
               strokeDasharray="3 3" 
             />
           </ComposedChart>

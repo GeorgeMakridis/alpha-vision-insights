@@ -16,6 +16,13 @@ import {
 import { CardGradient } from "./ui/card-gradient";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
+import { 
+  Tooltip as UITooltip, 
+  TooltipProvider, 
+  TooltipTrigger, 
+  TooltipContent 
+} from "./ui/tooltip";
+import { Info, AlertCircle, CircleDashed } from "lucide-react";
 
 interface AssetVaRChartProps {
   ticker: string;
@@ -54,6 +61,9 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
       // Get the price history for the specified number of days
       const priceData = stock.priceHistory.slice(-days);
       
+      // Calculate VaR lines values (for visual reference)
+      const priceMin = Math.min(...priceData.map(d => d.price)) * 0.95;
+      
       // Enhance with VaR breach markers for visualization
       const enhancedData = priceData.map((day) => {
         // Simulate VaR breaches based on price movements (for visualization)
@@ -65,7 +75,14 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
           deepVaR95Breach: Math.random() > 0.96 ? -1 : null,
           parametricVaR99Breach: Math.random() > 0.99 ? -1 : null, 
           monteCarloVaR99Breach: Math.random() > 0.99 ? -1 : null,
-          deepVaR99Breach: Math.random() > 0.99 ? -1 : null
+          deepVaR99Breach: Math.random() > 0.99 ? -1 : null,
+          // Add VaR threshold values for the lines
+          parametricVaR95Line: priceMin * 1.05,
+          monteCarloVaR95Line: priceMin * 1.04,
+          deepVaR95Line: priceMin * 1.03,
+          parametricVaR99Line: priceMin * 1.02,
+          monteCarloVaR99Line: priceMin * 1.01,
+          deepVaR99Line: priceMin * 1.00
         };
       });
       
@@ -97,7 +114,25 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
 
   return (
     <CardGradient className="h-[500px]">
-      <h3 className="text-lg font-medium mb-4">Price & VaR Analysis</h3>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg font-medium">Price & VaR Analysis</h3>
+          <TooltipProvider>
+            <UITooltip>
+              <TooltipTrigger asChild>
+                <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <p>Value at Risk (VaR) shows the expected maximum loss with a specific confidence level. Dots indicate breach events where actual losses exceeded the VaR prediction.</p>
+              </TooltipContent>
+            </UITooltip>
+          </TooltipProvider>
+        </div>
+        <div className="flex gap-1 items-center">
+          <AlertCircle className="h-4 w-4 text-dashboard-negative mr-1" />
+          <span className="text-xs text-muted-foreground">Breach events</span>
+        </div>
+      </div>
       
       <div className="flex flex-wrap gap-4 mb-4">
         {varMethods.map((method) => (
@@ -109,12 +144,29 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
               className="data-[state=checked]:bg-[color:var(--method-color)] data-[state=checked]:border-[color:var(--method-color)]"
               style={{ '--method-color': method.color } as React.CSSProperties}
             />
-            <Label 
-              htmlFor={method.key}
-              className="text-sm cursor-pointer"
-            >
-              {method.name}
-            </Label>
+            <TooltipProvider>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1">
+                    <Label 
+                      htmlFor={method.key}
+                      className="text-sm cursor-pointer"
+                    >
+                      {method.name}
+                    </Label>
+                    <CircleDashed className="h-3 w-3 text-muted-foreground" />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs font-medium">{method.name}</p>
+                  <p className="text-xs mt-1">
+                    {method.confidence === '95' 
+                      ? 'Expected to be exceeded 5% of the time (1.25 days per month)'
+                      : 'Expected to be exceeded 1% of the time (2.5 days per year)'}
+                  </p>
+                </TooltipContent>
+              </UITooltip>
+            </TooltipProvider>
           </div>
         ))}
       </div>
@@ -148,7 +200,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
               labelStyle={{ color: '#E5E7EB' }}
               formatter={(value: any, name: string) => {
                 // Format breach values
-                if (name.includes('Breach') && value !== null) {
+                if (typeof name === 'string' && name.includes('Breach') && value !== null) {
                   return ['VaR Breach', ''];
                 }
                 if (typeof value === 'number') {
@@ -238,22 +290,70 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
               />
             )}
             
-            {/* Reference lines for VaR levels - Show only the selected ones */}
+            {/* VaR level lines - Show only the selected ones */}
             {selectedVaRMethods.includes('parametricVaR95') && (
-              <ReferenceLine 
-                y={priceMin * 1.05} 
+              <Line 
                 yAxisId="left" 
-                label={{ value: 'VaR 95%', position: 'insideBottomLeft', fill: '#ef4444' }} 
+                type="monotone" 
+                dataKey="parametricVaR95Line" 
+                name="Parametric VaR 95%" 
                 stroke="#ef4444" 
+                dot={false}
+                strokeDasharray="3 3" 
+              />
+            )}
+            {selectedVaRMethods.includes('monteCarloVaR95') && (
+              <Line 
+                yAxisId="left" 
+                type="monotone" 
+                dataKey="monteCarloVaR95Line" 
+                name="Monte Carlo VaR 95%" 
+                stroke="#f97316" 
+                dot={false}
+                strokeDasharray="3 3" 
+              />
+            )}
+            {selectedVaRMethods.includes('deepVaR95') && (
+              <Line 
+                yAxisId="left" 
+                type="monotone" 
+                dataKey="deepVaR95Line" 
+                name="Deep VaR 95%" 
+                stroke="#eab308" 
+                dot={false}
                 strokeDasharray="3 3" 
               />
             )}
             {selectedVaRMethods.includes('parametricVaR99') && (
-              <ReferenceLine 
-                y={priceMin * 1.02} 
+              <Line 
                 yAxisId="left" 
-                label={{ value: 'VaR 99%', position: 'insideBottomLeft', fill: '#ec4899' }} 
+                type="monotone" 
+                dataKey="parametricVaR99Line" 
+                name="Parametric VaR 99%" 
                 stroke="#ec4899" 
+                dot={false}
+                strokeDasharray="3 3" 
+              />
+            )}
+            {selectedVaRMethods.includes('monteCarloVaR99') && (
+              <Line 
+                yAxisId="left" 
+                type="monotone" 
+                dataKey="monteCarloVaR99Line" 
+                name="Monte Carlo VaR 99%" 
+                stroke="#8b5cf6" 
+                dot={false}
+                strokeDasharray="3 3" 
+              />
+            )}
+            {selectedVaRMethods.includes('deepVaR99') && (
+              <Line 
+                yAxisId="left" 
+                type="monotone" 
+                dataKey="deepVaR99Line" 
+                name="Deep VaR 99%" 
+                stroke="#06b6d4" 
+                dot={false}
                 strokeDasharray="3 3" 
               />
             )}

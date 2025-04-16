@@ -14,6 +14,13 @@ import {
   YAxis 
 } from "recharts";
 import { CardGradient } from "./ui/card-gradient";
+import { 
+  Tooltip as UITooltip, 
+  TooltipProvider, 
+  TooltipTrigger, 
+  TooltipContent 
+} from "./ui/tooltip";
+import { Info } from "lucide-react";
 
 interface AssetChartProps {
   ticker: string;
@@ -50,7 +57,19 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
 
   return (
     <CardGradient className="h-[400px]">
-      <h3 className="text-lg font-medium mb-4">Sentiment & Volume Analysis</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-medium">Sentiment & Volume Analysis</h3>
+        <TooltipProvider>
+          <UITooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p>This chart shows asset price, sentiment scores (-1 to 1), and news volume. Higher sentiment indicates positive market perception.</p>
+            </TooltipContent>
+          </UITooltip>
+        </TooltipProvider>
+      </div>
       <div className="h-[320px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
