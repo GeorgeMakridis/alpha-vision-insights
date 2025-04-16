@@ -13,8 +13,7 @@ import {
   Tooltip, 
   XAxis, 
   YAxis,
-  ReferenceLine,
-  Bar
+  ReferenceLine
 } from "recharts";
 import { 
   Tooltip as UITooltip, 
@@ -231,12 +230,6 @@ export default function PortfolioVaRChart({
                 style: { textAnchor: 'middle' }
               }}
             />
-            <YAxis 
-              yAxisId="volume"
-              orientation="left"
-              domain={[0, 'auto']}
-              hide={true}
-            />
             <Tooltip 
               contentStyle={{ 
                 backgroundColor: '#1F2937', 
@@ -252,17 +245,6 @@ export default function PortfolioVaRChart({
               verticalAlign="top"
               height={36}
               wrapperStyle={{ paddingTop: '10px' }}
-            />
-            
-            {/* Volume bars at the bottom */}
-            <Bar 
-              yAxisId="volume"
-              dataKey="volume"
-              name="Volume"
-              fill="#10B981"
-              opacity={0.5}
-              barSize={20}
-              isAnimationActive={false}
             />
             
             {/* Portfolio price line */}
