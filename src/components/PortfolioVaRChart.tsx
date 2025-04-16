@@ -86,9 +86,13 @@ export default function PortfolioVaRChart({
       const stock = mockStocks.find(s => s.ticker === ticker);
       if (stock && weights[ticker]) {
         // Weight the VaR metrics by the asset's portfolio weight
-        historicVaR95 += stock.riskMetrics.historicVaR95 * weights[ticker];
-        parametricVaR95 += stock.riskMetrics.parametricVaR95 * weights[ticker];
-        monteCarloVaR95 += stock.riskMetrics.monteCarloVaR95 * weights[ticker];
+        // Use 'metrics' instead of 'riskMetrics'
+        parametricVaR95 += stock.metrics.parametricVaR95 / 100 * weights[ticker];
+        monteCarloVaR95 += stock.metrics.monteCarloVaR95 / 100 * weights[ticker];
+        
+        // For historicVaR95, we'll use parametricVaR95 value since it's not in the data
+        // This is just an approximation
+        historicVaR95 += stock.metrics.parametricVaR95 / 100 * weights[ticker];
       }
     });
     
