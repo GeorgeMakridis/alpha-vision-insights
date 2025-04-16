@@ -10,8 +10,7 @@ import {
   ResponsiveContainer, 
   Tooltip, 
   XAxis, 
-  YAxis,
-  ReferenceLine 
+  YAxis
 } from "recharts";
 import { CardGradient } from "./ui/card-gradient";
 import { Checkbox } from "./ui/checkbox";
@@ -22,7 +21,7 @@ import {
   TooltipTrigger, 
   TooltipContent 
 } from "./ui/tooltip";
-import { Info, AlertCircle, CircleDashed } from "lucide-react";
+import { Info, CircleDashed } from "lucide-react";
 
 interface AssetVaRChartProps {
   ticker: string;
@@ -64,18 +63,10 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
       // Calculate VaR lines values (for visual reference)
       const priceMin = Math.min(...priceData.map(d => d.price)) * 0.95;
       
-      // Enhance with VaR breach markers for visualization
+      // Add VaR levels for visualization
       const enhancedData = priceData.map((day) => {
-        // Simulate VaR breaches based on price movements (for visualization)
         return {
           ...day,
-          // Simulate breaches for each VaR method
-          parametricVaR95Breach: Math.random() > 0.95 ? -1 : null,
-          monteCarloVaR95Breach: Math.random() > 0.95 ? -1 : null,
-          deepVaR95Breach: Math.random() > 0.96 ? -1 : null,
-          parametricVaR99Breach: Math.random() > 0.99 ? -1 : null, 
-          monteCarloVaR99Breach: Math.random() > 0.99 ? -1 : null,
-          deepVaR99Breach: Math.random() > 0.99 ? -1 : null,
           // Add VaR threshold values for the lines
           parametricVaR95Line: priceMin * 1.05,
           monteCarloVaR95Line: priceMin * 1.04,
@@ -123,14 +114,10 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
                 <Info className="h-4 w-4 text-muted-foreground cursor-help" />
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
-                <p>Value at Risk (VaR) shows the expected maximum loss with a specific confidence level. Dots indicate breach events where actual losses exceeded the VaR prediction.</p>
+                <p>Value at Risk (VaR) shows the expected maximum loss with a specific confidence level. The VaR lines represent price thresholds that should be breached only in rare cases.</p>
               </TooltipContent>
             </UITooltip>
           </TooltipProvider>
-        </div>
-        <div className="flex gap-1 items-center">
-          <AlertCircle className="h-4 w-4 text-dashboard-negative mr-1" />
-          <span className="text-xs text-muted-foreground">Breach events</span>
         </div>
       </div>
       
@@ -189,20 +176,10 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
               tickLine={{ stroke: '#4B5563' }}
               label={{ value: 'Price ($)', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
             />
-            <YAxis 
-              yAxisId="breach" 
-              orientation="left" 
-              domain={[-1.5, 0.5]}
-              hide
-            />
             <Tooltip 
               contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#4B5563' }}
               labelStyle={{ color: '#E5E7EB' }}
               formatter={(value: any, name: string) => {
-                // Format breach values
-                if (typeof name === 'string' && name.includes('Breach') && value !== null) {
-                  return ['VaR Breach', ''];
-                }
                 if (typeof value === 'number') {
                   return [value.toFixed(2), name];
                 }
@@ -228,68 +205,6 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
               opacity={0.05}
             />
             
-            {/* VaR Breach Markers - Only show selected ones */}
-            {selectedVaRMethods.includes('parametricVaR95') && (
-              <Line 
-                yAxisId="breach" 
-                dataKey="parametricVaR95Breach" 
-                name="Parametric VaR 95% Breach" 
-                stroke="#ef4444" 
-                strokeWidth={0}
-                dot={{ r: 6, fill: '#ef4444' }}
-              />
-            )}
-            {selectedVaRMethods.includes('monteCarloVaR95') && (
-              <Line 
-                yAxisId="breach" 
-                dataKey="monteCarloVaR95Breach" 
-                name="Monte Carlo VaR 95% Breach" 
-                stroke="#f97316" 
-                strokeWidth={0}
-                dot={{ r: 6, fill: '#f97316' }}
-              />
-            )}
-            {selectedVaRMethods.includes('deepVaR95') && (
-              <Line 
-                yAxisId="breach" 
-                dataKey="deepVaR95Breach" 
-                name="Deep VaR 95% Breach" 
-                stroke="#eab308" 
-                strokeWidth={0}
-                dot={{ r: 6, fill: '#eab308' }}
-              />
-            )}
-            {selectedVaRMethods.includes('parametricVaR99') && (
-              <Line 
-                yAxisId="breach" 
-                dataKey="parametricVaR99Breach" 
-                name="Parametric VaR 99% Breach" 
-                stroke="#ec4899" 
-                strokeWidth={0}
-                dot={{ r: 8, fill: '#ec4899', stroke: '#ffffff', strokeWidth: 1 }}
-              />
-            )}
-            {selectedVaRMethods.includes('monteCarloVaR99') && (
-              <Line 
-                yAxisId="breach" 
-                dataKey="monteCarloVaR99Breach" 
-                name="Monte Carlo VaR 99% Breach" 
-                stroke="#8b5cf6" 
-                strokeWidth={0}
-                dot={{ r: 8, fill: '#8b5cf6', stroke: '#ffffff', strokeWidth: 1 }}
-              />
-            )}
-            {selectedVaRMethods.includes('deepVaR99') && (
-              <Line 
-                yAxisId="breach" 
-                dataKey="deepVaR99Breach" 
-                name="Deep VaR 99% Breach" 
-                stroke="#06b6d4" 
-                strokeWidth={0}
-                dot={{ r: 8, fill: '#06b6d4', stroke: '#ffffff', strokeWidth: 1 }}
-              />
-            )}
-            
             {/* VaR level lines - Show only the selected ones */}
             {selectedVaRMethods.includes('parametricVaR95') && (
               <Line 
@@ -300,6 +215,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
                 stroke="#ef4444" 
                 dot={false}
                 strokeDasharray="3 3" 
+                strokeWidth={1.5}
               />
             )}
             {selectedVaRMethods.includes('monteCarloVaR95') && (
@@ -311,6 +227,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
                 stroke="#f97316" 
                 dot={false}
                 strokeDasharray="3 3" 
+                strokeWidth={1.5}
               />
             )}
             {selectedVaRMethods.includes('deepVaR95') && (
@@ -322,6 +239,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
                 stroke="#eab308" 
                 dot={false}
                 strokeDasharray="3 3" 
+                strokeWidth={1.5}
               />
             )}
             {selectedVaRMethods.includes('parametricVaR99') && (
@@ -333,6 +251,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
                 stroke="#ec4899" 
                 dot={false}
                 strokeDasharray="3 3" 
+                strokeWidth={1.5}
               />
             )}
             {selectedVaRMethods.includes('monteCarloVaR99') && (
@@ -344,6 +263,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
                 stroke="#8b5cf6" 
                 dot={false}
                 strokeDasharray="3 3" 
+                strokeWidth={1.5}
               />
             )}
             {selectedVaRMethods.includes('deepVaR99') && (
@@ -355,6 +275,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
                 stroke="#06b6d4" 
                 dot={false}
                 strokeDasharray="3 3" 
+                strokeWidth={1.5}
               />
             )}
           </ComposedChart>
