@@ -11,6 +11,7 @@ import PortfolioMetricsCard from "@/components/PortfolioMetricsCard";
 import PortfolioAllocationChart from "@/components/PortfolioAllocationChart";
 import PortfolioChart from "@/components/PortfolioChart";
 import PortfolioVaRChart from "@/components/PortfolioVaRChart";
+import AssetNewsHeadlines from "@/components/AssetNewsHeadlines";
 import { mockStocks } from "@/data/mockData";
 import { BarChart, TrendingUp, Info } from "lucide-react";
 
@@ -153,6 +154,8 @@ const Index = () => {
             <AssetVaRChart ticker={selectedAsset} />
             
             <AssetChart ticker={selectedAsset} />
+            
+            <AssetNewsHeadlines ticker={selectedAsset} />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <VaRMetricsCard ticker={selectedAsset} />
