@@ -1,4 +1,3 @@
-
 import { CardGradient } from "@/components/ui/card-gradient";
 import { calculatePortfolioPriceHistory } from "@/data/mockData";
 import { AlertTriangle, Info } from "lucide-react";
@@ -99,14 +98,14 @@ export default function PortfolioChart({
   return (
     <CardGradient className="h-[500px]">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium">Portfolio Performance & VaR Analysis</h3>
+        <h3 className="text-lg font-medium">Portfolio Performance & Sentiment</h3>
         <TooltipProvider>
           <UITooltip>
             <TooltipTrigger asChild>
               <Info className="h-4 w-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              <p>This chart shows portfolio value, sentiment (from -1 to 1), and news volume. Dots indicate VaR breach events, and dashed lines represent VaR thresholds.</p>
+              <p>This chart shows portfolio value and sentiment scores (-1 to 1). Higher sentiment indicates positive market perception.</p>
             </TooltipContent>
           </UITooltip>
         </TooltipProvider>
@@ -127,7 +126,7 @@ export default function PortfolioChart({
               stroke="#9CA3AF"
               tick={{ fill: '#9CA3AF' }}
               tickLine={{ stroke: '#4B5563' }}
-              label={{ value: 'Price ($)', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
+              label={{ value: 'Price', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
             />
             <YAxis 
               yAxisId="right" 
@@ -144,20 +143,10 @@ export default function PortfolioChart({
               domain={[0, 'auto']}
               hide
             />
-            <YAxis 
-              yAxisId="breach" 
-              orientation="left" 
-              domain={[-1.5, 0.5]}
-              hide
-            />
             <Tooltip 
               contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#4B5563' }}
               labelStyle={{ color: '#E5E7EB' }}
               formatter={(value: any, name: string) => {
-                // Format breach values
-                if (typeof name === 'string' && name.includes('Breach') && value !== null) {
-                  return ['VaR Breach', ''];
-                }
                 if (typeof value === 'number') {
                   return [value.toFixed(2), name];
                 }
@@ -170,7 +159,7 @@ export default function PortfolioChart({
               type="monotone" 
               dataKey="price" 
               name="Portfolio Value" 
-              stroke="#9b87f5" 
+              stroke="#8B5CF6" 
               strokeWidth={2}
               dot={false}
             />
@@ -179,7 +168,7 @@ export default function PortfolioChart({
               type="monotone" 
               dataKey="sentiment" 
               name="Portfolio Sentiment" 
-              stroke="#8B5CF6" 
+              stroke="#22D3EE" 
               strokeWidth={2}
               dot={false}
             />
@@ -187,7 +176,7 @@ export default function PortfolioChart({
               yAxisId="volume" 
               dataKey="volume" 
               name="Total Volume" 
-              fill="#3730a3"
+              fill="#10B981"
               opacity={0.6} 
               barSize={30}
             />
@@ -195,115 +184,9 @@ export default function PortfolioChart({
               yAxisId="left"
               type="monotone"
               dataKey="price"
-              fill="#9b87f5"
+              fill="#8B5CF6"
               stroke="none"
-              opacity={0.05}
-            />
-            
-            {/* VaR Breach Markers */}
-            <Line 
-              yAxisId="breach" 
-              dataKey="parametricVaR95Breach" 
-              name="Parametric VaR 95% Breach" 
-              stroke="#ef4444" 
-              strokeWidth={0}
-              dot={{ r: 6, fill: '#ef4444' }}
-            />
-            <Line 
-              yAxisId="breach" 
-              dataKey="monteCarloVaR95Breach" 
-              name="Monte Carlo VaR 95% Breach" 
-              stroke="#f97316" 
-              strokeWidth={0}
-              dot={{ r: 6, fill: '#f97316' }}
-            />
-            <Line 
-              yAxisId="breach" 
-              dataKey="deepVaR95Breach" 
-              name="Deep VaR 95% Breach" 
-              stroke="#eab308" 
-              strokeWidth={0}
-              dot={{ r: 6, fill: '#eab308' }}
-            />
-            <Line 
-              yAxisId="breach" 
-              dataKey="parametricVaR99Breach" 
-              name="Parametric VaR 99% Breach" 
-              stroke="#ec4899" 
-              strokeWidth={0}
-              dot={{ r: 8, fill: '#ec4899', stroke: '#ffffff', strokeWidth: 1 }}
-            />
-            <Line 
-              yAxisId="breach" 
-              dataKey="monteCarloVaR99Breach" 
-              name="Monte Carlo VaR 99% Breach" 
-              stroke="#8b5cf6" 
-              strokeWidth={0}
-              dot={{ r: 8, fill: '#8b5cf6', stroke: '#ffffff', strokeWidth: 1 }}
-            />
-            <Line 
-              yAxisId="breach" 
-              dataKey="deepVaR99Breach" 
-              name="Deep VaR 99% Breach" 
-              stroke="#06b6d4" 
-              strokeWidth={0}
-              dot={{ r: 8, fill: '#06b6d4', stroke: '#ffffff', strokeWidth: 1 }}
-            />
-            
-            {/* VaR lines */}
-            <Line 
-              yAxisId="left" 
-              type="monotone" 
-              dataKey="parametricVaR95Line" 
-              name="Parametric VaR 95%" 
-              stroke="#ef4444" 
-              dot={false}
-              strokeDasharray="3 3" 
-            />
-            <Line 
-              yAxisId="left" 
-              type="monotone" 
-              dataKey="monteCarloVaR95Line" 
-              name="Monte Carlo VaR 95%" 
-              stroke="#f97316" 
-              dot={false}
-              strokeDasharray="3 3" 
-            />
-            <Line 
-              yAxisId="left" 
-              type="monotone" 
-              dataKey="deepVaR95Line" 
-              name="Deep VaR 95%" 
-              stroke="#eab308" 
-              dot={false}
-              strokeDasharray="3 3" 
-            />
-            <Line 
-              yAxisId="left" 
-              type="monotone" 
-              dataKey="parametricVaR99Line" 
-              name="Parametric VaR 99%" 
-              stroke="#ec4899" 
-              dot={false}
-              strokeDasharray="3 3" 
-            />
-            <Line 
-              yAxisId="left" 
-              type="monotone" 
-              dataKey="monteCarloVaR99Line" 
-              name="Monte Carlo VaR 99%" 
-              stroke="#8b5cf6" 
-              dot={false}
-              strokeDasharray="3 3" 
-            />
-            <Line 
-              yAxisId="left" 
-              type="monotone" 
-              dataKey="deepVaR99Line" 
-              name="Deep VaR 99%" 
-              stroke="#06b6d4" 
-              dot={false}
-              strokeDasharray="3 3" 
+              opacity={0.1}
             />
           </ComposedChart>
         </ResponsiveContainer>

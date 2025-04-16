@@ -58,14 +58,14 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
   return (
     <CardGradient className="h-[400px]">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-medium">Sentiment & Volume Analysis</h3>
+        <h3 className="text-lg font-medium">Sentiment & Price Analysis</h3>
         <TooltipProvider>
           <UITooltip>
             <TooltipTrigger asChild>
               <Info className="h-4 w-4 text-muted-foreground cursor-help" />
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              <p>This chart shows asset price, sentiment scores (-1 to 1), and news volume. Higher sentiment indicates positive market perception.</p>
+              <p>This chart shows asset price and sentiment scores (-1 to 1). Higher sentiment indicates positive market perception.</p>
             </TooltipContent>
           </UITooltip>
         </TooltipProvider>
@@ -86,7 +86,7 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               stroke="#9CA3AF"
               tick={{ fill: '#9CA3AF' }}
               tickLine={{ stroke: '#4B5563' }}
-              label={{ value: 'Price ($)', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
+              label={{ value: 'Price', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
             />
             <YAxis 
               yAxisId="right" 
@@ -119,7 +119,7 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               type="monotone" 
               dataKey="price" 
               name="Price" 
-              stroke="#9b87f5" 
+              stroke="#8B5CF6" 
               strokeWidth={2}
               dot={false}
             />
@@ -128,7 +128,7 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               type="monotone" 
               dataKey="sentiment" 
               name="Sentiment" 
-              stroke="#8B5CF6" 
+              stroke="#22D3EE" 
               strokeWidth={2}
               dot={false}
             />
@@ -136,7 +136,7 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               yAxisId="volume" 
               dataKey="volume" 
               name="News Volume" 
-              fill="#3730a3"
+              fill="#10B981"
               opacity={0.6} 
               barSize={30}
             />
@@ -144,9 +144,9 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               yAxisId="left"
               type="monotone"
               dataKey="price"
-              fill="#9b87f5"
+              fill="#8B5CF6"
               stroke="none"
-              opacity={0.05}
+              opacity={0.1}
             />
           </ComposedChart>
         </ResponsiveContainer>
