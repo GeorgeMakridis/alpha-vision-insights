@@ -1,4 +1,3 @@
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useState, useEffect } from "react";
 import AssetSelector from "@/components/AssetSelector";
@@ -11,6 +10,7 @@ import PortfolioAssetSelector from "@/components/PortfolioAssetSelector";
 import PortfolioMetricsCard from "@/components/PortfolioMetricsCard";
 import PortfolioAllocationChart from "@/components/PortfolioAllocationChart";
 import PortfolioChart from "@/components/PortfolioChart";
+import PortfolioVaRChart from "@/components/PortfolioVaRChart";
 import { mockStocks } from "@/data/mockData";
 import { BarChart, TrendingUp, Info } from "lucide-react";
 
@@ -184,6 +184,11 @@ const Index = () => {
                 />
               </div>
             </div>
+            
+            <PortfolioVaRChart
+              selectedAssets={selectedPortfolioAssets}
+              weights={portfolioWeights}
+            />
             
             <PortfolioChart
               selectedAssets={selectedPortfolioAssets}
