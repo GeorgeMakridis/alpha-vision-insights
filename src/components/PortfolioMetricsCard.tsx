@@ -1,7 +1,7 @@
 
 import { CardGradient } from "@/components/ui/card-gradient";
-import { calculatePortfolioMetrics, formatPercent } from "@/data/mockData";
-import { AlertTriangle, BarChart, TrendingUp, Activity } from "lucide-react";
+import { calculatePortfolioMetrics, formatPercent, mockStocks } from "@/data/mockData";
+import { AlertTriangle, BarChart, TrendingUp, Activity, ShieldAlert } from "lucide-react";
 
 interface PortfolioMetricsCardProps {
   selectedAssets: string[];
@@ -21,8 +21,18 @@ export default function PortfolioMetricsCard({
     );
   }
   
-  // Calculate portfolio metrics
+  // Calculate portfolio metrics including weighted VaR
   const metrics = calculatePortfolioMetrics(selectedAssets, weights);
+  
+  // Calculate weighted VaR breach statistics (number of breaches)
+  const varBreaches = {
+    parametricVaR95: Math.floor(Math.random() * 10), // Simulated data
+    monteCarloVaR95: Math.floor(Math.random() * 8),
+    deepVaR95: Math.floor(Math.random() * 6),
+    parametricVaR99: Math.floor(Math.random() * 5),
+    monteCarloVaR99: Math.floor(Math.random() * 3),
+    deepVaR99: Math.floor(Math.random() * 2)
+  };
   
   // Determine classes based on value
   const getColorClass = (value: number) => {
@@ -95,21 +105,30 @@ export default function PortfolioMetricsCard({
                 
                 <div className="space-y-2">
                   <div>
-                    <p className="text-xs text-muted-foreground">Parametric</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs text-muted-foreground">Parametric</p>
+                      <span className="text-xs font-medium text-red-400">{varBreaches.parametricVaR95} breach{varBreaches.parametricVaR95 !== 1 ? 'es' : ''}</span>
+                    </div>
                     <p className="text-sm font-semibold text-dashboard-negative">
                       -{metrics.parametricVaR95.toFixed(2)}%
                     </p>
                   </div>
                   
                   <div>
-                    <p className="text-xs text-muted-foreground">Monte Carlo</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs text-muted-foreground">Monte Carlo</p>
+                      <span className="text-xs font-medium text-red-400">{varBreaches.monteCarloVaR95} breach{varBreaches.monteCarloVaR95 !== 1 ? 'es' : ''}</span>
+                    </div>
                     <p className="text-sm font-semibold text-dashboard-negative">
                       -{metrics.monteCarloVaR95.toFixed(2)}%
                     </p>
                   </div>
                   
                   <div>
-                    <p className="text-xs text-muted-foreground">DeepVaR</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs text-muted-foreground">DeepVaR</p>
+                      <span className="text-xs font-medium text-red-400">{varBreaches.deepVaR95} breach{varBreaches.deepVaR95 !== 1 ? 'es' : ''}</span>
+                    </div>
                     <p className="text-sm font-semibold text-dashboard-negative">
                       -{metrics.deepVaR95.toFixed(2)}%
                     </p>
@@ -125,21 +144,30 @@ export default function PortfolioMetricsCard({
                 
                 <div className="space-y-2">
                   <div>
-                    <p className="text-xs text-muted-foreground">Parametric</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs text-muted-foreground">Parametric</p>
+                      <span className="text-xs font-medium text-red-400">{varBreaches.parametricVaR99} breach{varBreaches.parametricVaR99 !== 1 ? 'es' : ''}</span>
+                    </div>
                     <p className="text-sm font-semibold text-dashboard-negative">
                       -{metrics.parametricVaR99.toFixed(2)}%
                     </p>
                   </div>
                   
                   <div>
-                    <p className="text-xs text-muted-foreground">Monte Carlo</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs text-muted-foreground">Monte Carlo</p>
+                      <span className="text-xs font-medium text-red-400">{varBreaches.monteCarloVaR99} breach{varBreaches.monteCarloVaR99 !== 1 ? 'es' : ''}</span>
+                    </div>
                     <p className="text-sm font-semibold text-dashboard-negative">
                       -{metrics.monteCarloVaR99.toFixed(2)}%
                     </p>
                   </div>
                   
                   <div>
-                    <p className="text-xs text-muted-foreground">DeepVaR</p>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs text-muted-foreground">DeepVaR</p>
+                      <span className="text-xs font-medium text-red-400">{varBreaches.deepVaR99} breach{varBreaches.deepVaR99 !== 1 ? 'es' : ''}</span>
+                    </div>
                     <p className="text-sm font-semibold text-dashboard-negative">
                       -{metrics.deepVaR99.toFixed(2)}%
                     </p>
