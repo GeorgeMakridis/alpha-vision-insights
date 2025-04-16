@@ -1,3 +1,4 @@
+
 import { CardGradient } from "@/components/ui/card-gradient";
 import { calculatePortfolioPriceHistory } from "@/data/mockData";
 import { AlertTriangle, Info } from "lucide-react";
@@ -41,33 +42,18 @@ export default function PortfolioChart({
       return;
     }
     
-    // Calculate the portfolio price history
     const data = calculatePortfolioPriceHistory(selectedAssets, weights);
     
-    // Filter for the specified number of days
     const filteredData = data.slice(-days);
     
-    // Find min price for VaR lines calculation
     const priceMin = Math.min(...filteredData.map((d: any) => d.price)) * 0.95;
     
-    // Add VaR breach markers and VaR lines - simulate breaches for visualization
     const enhancedData = filteredData.map((day: any) => {
       return {
         ...day,
-        // Breach markers
-        parametricVaR95Breach: Math.random() > 0.95 ? -1 : null,
-        monteCarloVaR95Breach: Math.random() > 0.95 ? -1 : null,
-        deepVaR95Breach: Math.random() > 0.96 ? -1 : null,
-        parametricVaR99Breach: Math.random() > 0.99 ? -1 : null, 
-        monteCarloVaR99Breach: Math.random() > 0.99 ? -1 : null,
-        deepVaR99Breach: Math.random() > 0.99 ? -1 : null,
-        // VaR threshold lines
         parametricVaR95Line: priceMin * 1.05,
         monteCarloVaR95Line: priceMin * 1.04,
         deepVaR95Line: priceMin * 1.03,
-        parametricVaR99Line: priceMin * 1.02,
-        monteCarloVaR99Line: priceMin * 1.01,
-        deepVaR99Line: priceMin * 1.00
       };
     });
     
@@ -91,7 +77,6 @@ export default function PortfolioChart({
     );
   }
 
-  // Find min and max for price to set the y-axis domain
   const priceMin = Math.min(...chartData.map((d: any) => d.price)) * 0.95;
   const priceMax = Math.max(...chartData.map((d: any) => d.price)) * 1.05;
 
@@ -121,27 +106,30 @@ export default function PortfolioChart({
               tickLine={{ stroke: '#4B5563' }}
             />
             <YAxis 
-              yAxisId="left"
+              yAxisId="volume"
+              orientation="left"
+              domain={[0, 'auto']}
+              stroke="#9CA3AF"
+              tick={{ fill: '#9CA3AF' }}
+              tickLine={{ stroke: '#4B5563' }}
+              label={{ value: 'Volume', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
+            />
+            <YAxis 
+              yAxisId="price"
+              orientation="right"
               domain={[priceMin, priceMax]}
               stroke="#9CA3AF"
               tick={{ fill: '#9CA3AF' }}
               tickLine={{ stroke: '#4B5563' }}
-              label={{ value: 'Price', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
+              label={{ value: 'Price', angle: 90, position: 'insideRight', fill: '#9CA3AF' }}
             />
             <YAxis 
-              yAxisId="right" 
-              orientation="right" 
+              yAxisId="sentiment"
+              orientation="right"
               domain={[-1, 1]}
               stroke="#9CA3AF"
               tick={{ fill: '#9CA3AF' }}
               tickLine={{ stroke: '#4B5563' }}
-              label={{ value: 'Sentiment', angle: 90, position: 'insideRight', fill: '#9CA3AF' }}
-            />
-            <YAxis 
-              yAxisId="volume" 
-              orientation="right" 
-              domain={[0, 'auto']}
-              hide
             />
             <Tooltip 
               contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#4B5563' }}
@@ -154,24 +142,6 @@ export default function PortfolioChart({
               }}
             />
             <Legend />
-            <Line 
-              yAxisId="left" 
-              type="monotone" 
-              dataKey="price" 
-              name="Portfolio Value" 
-              stroke="#8B5CF6" 
-              strokeWidth={2}
-              dot={false}
-            />
-            <Line 
-              yAxisId="right" 
-              type="monotone" 
-              dataKey="sentiment" 
-              name="Portfolio Sentiment" 
-              stroke="#22D3EE" 
-              strokeWidth={2}
-              dot={false}
-            />
             <Bar 
               yAxisId="volume" 
               dataKey="volume" 
@@ -180,8 +150,26 @@ export default function PortfolioChart({
               opacity={0.6} 
               barSize={30}
             />
+            <Line 
+              yAxisId="price" 
+              type="monotone" 
+              dataKey="price" 
+              name="Portfolio Value" 
+              stroke="#8B5CF6" 
+              strokeWidth={2}
+              dot={false}
+            />
+            <Line 
+              yAxisId="sentiment" 
+              type="monotone" 
+              dataKey="sentiment" 
+              name="Portfolio Sentiment" 
+              stroke="#22D3EE" 
+              strokeWidth={2}
+              dot={false}
+            />
             <Area
-              yAxisId="left"
+              yAxisId="price"
               type="monotone"
               dataKey="price"
               fill="#8B5CF6"
@@ -194,3 +182,4 @@ export default function PortfolioChart({
     </CardGradient>
   );
 }
+

@@ -31,11 +31,9 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
   const [chartData, setChartData] = useState<any[]>([]);
 
   useEffect(() => {
-    // Find the selected stock
     const stock = mockStocks.find((s) => s.ticker === ticker);
     
     if (stock) {
-      // Get the price history for the specified number of days
       const data = stock.priceHistory.slice(-days);
       setChartData(data);
     } else {
@@ -51,7 +49,6 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
     );
   }
 
-  // Find min and max for price to set the y-axis domain
   const priceMin = Math.min(...chartData.map(d => d.price)) * 0.95;
   const priceMax = Math.max(...chartData.map(d => d.price)) * 1.05;
 
@@ -81,27 +78,30 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               tickLine={{ stroke: '#4B5563' }}
             />
             <YAxis 
-              yAxisId="left"
+              yAxisId="volume"
+              orientation="left"
+              domain={[0, 'auto']}
+              stroke="#9CA3AF"
+              tick={{ fill: '#9CA3AF' }}
+              tickLine={{ stroke: '#4B5563' }}
+              label={{ value: 'Volume', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
+            />
+            <YAxis 
+              yAxisId="price"
+              orientation="right"
               domain={[priceMin, priceMax]}
               stroke="#9CA3AF"
               tick={{ fill: '#9CA3AF' }}
               tickLine={{ stroke: '#4B5563' }}
-              label={{ value: 'Price', angle: -90, position: 'insideLeft', fill: '#9CA3AF' }}
+              label={{ value: 'Price', angle: 90, position: 'insideRight', fill: '#9CA3AF' }}
             />
             <YAxis 
-              yAxisId="right" 
-              orientation="right" 
+              yAxisId="sentiment"
+              orientation="right"
               domain={[-1, 1]}
               stroke="#9CA3AF"
               tick={{ fill: '#9CA3AF' }}
               tickLine={{ stroke: '#4B5563' }}
-              label={{ value: 'Sentiment', angle: 90, position: 'insideRight', fill: '#9CA3AF' }}
-            />
-            <YAxis 
-              yAxisId="volume" 
-              orientation="right" 
-              domain={[0, 'auto']}
-              hide
             />
             <Tooltip 
               contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#4B5563' }}
@@ -114,24 +114,6 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               }}
             />
             <Legend />
-            <Line 
-              yAxisId="left" 
-              type="monotone" 
-              dataKey="price" 
-              name="Price" 
-              stroke="#8B5CF6" 
-              strokeWidth={2}
-              dot={false}
-            />
-            <Line 
-              yAxisId="right" 
-              type="monotone" 
-              dataKey="sentiment" 
-              name="Sentiment" 
-              stroke="#22D3EE" 
-              strokeWidth={2}
-              dot={false}
-            />
             <Bar 
               yAxisId="volume" 
               dataKey="volume" 
@@ -140,8 +122,26 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               opacity={0.6} 
               barSize={30}
             />
+            <Line 
+              yAxisId="price" 
+              type="monotone" 
+              dataKey="price" 
+              name="Price" 
+              stroke="#8B5CF6" 
+              strokeWidth={2}
+              dot={false}
+            />
+            <Line 
+              yAxisId="sentiment" 
+              type="monotone" 
+              dataKey="sentiment" 
+              name="Sentiment" 
+              stroke="#22D3EE" 
+              strokeWidth={2}
+              dot={false}
+            />
             <Area
-              yAxisId="left"
+              yAxisId="price"
               type="monotone"
               dataKey="price"
               fill="#8B5CF6"
@@ -154,3 +154,4 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
     </CardGradient>
   );
 }
+
