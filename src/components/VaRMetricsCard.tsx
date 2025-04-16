@@ -1,12 +1,18 @@
 
 import { CardGradient } from "@/components/ui/card-gradient";
 import { mockStocks } from "@/data/mockData";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Info } from "lucide-react";
 import { 
   HoverCard, 
   HoverCardTrigger, 
   HoverCardContent 
 } from "@/components/ui/hover-card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger
+} from "@/components/ui/tooltip";
 
 interface VaRMetricsCardProps {
   ticker: string;
@@ -70,9 +76,27 @@ export default function VaRMetricsCard({ ticker }: VaRMetricsCardProps) {
   
   return (
     <CardGradient>
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="text-dashboard-accent h-5 w-5" />
-        <h3 className="text-lg font-medium">Value at Risk (VaR) Metrics & Backtesting</h3>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="text-dashboard-accent h-5 w-5" />
+          <h3 className="text-lg font-medium">Value at Risk (VaR) Metrics & Backtesting</h3>
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button className="p-1 rounded-full hover:bg-slate-700/30">
+                <Info className="h-5 w-5 text-muted-foreground" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-xs">
+              <div className="space-y-2">
+                <p className="text-sm">Value at Risk (VaR) estimates the maximum potential loss over a specific time horizon at a given confidence level.</p>
+                <p className="text-sm"><span className="font-medium">Breach:</span> When actual loss exceeds VaR prediction. With 95% confidence, we expect breaches 5% of the time.</p>
+                <p className="text-sm"><span className="font-medium">Backtesting:</span> Comparing actual breaches to expected breaches validates model accuracy. Significantly more breaches than expected indicates poor risk estimation.</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
       
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
@@ -220,29 +244,54 @@ export default function VaRMetricsCard({ ticker }: VaRMetricsCardProps) {
           </div>
         </div>
         
-        {/* VaR Explanation */}
+        {/* Charts preview column - kept the same width but replaced content */}
         <div className="col-span-2">
-          <div className="bg-slate-800/50 rounded-lg p-4 h-full">
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">VaR Interpretation</h4>
+          <div className="bg-slate-800/50 rounded-lg p-4 h-full flex flex-col gap-2">
+            {/* Add any additional content you want in this space */}
+            <h4 className="text-sm font-medium text-muted-foreground mb-1">Breach Statistics</h4>
             
-            <div className="space-y-3">
-              <div className="border-b border-slate-700 pb-2">
-                <p className="text-xs text-muted-foreground">
-                  Value at Risk (VaR) estimates the maximum potential loss over a specific time horizon at a given confidence level.
+            <div className="grid grid-cols-2 gap-2">
+              <div className="col-span-1">
+                <p className="text-xs text-muted-foreground">95% Confidence</p>
+                <div className="h-2 w-full bg-slate-700 rounded-full mt-1 overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-dashboard-accent to-dashboard-negative" 
+                    style={{ width: `${(breachStats.parametricVaR95.breachPercentage/5)*100}%` }} 
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {breachStats.parametricVaR95.breachPercentage}% vs 5% expected
                 </p>
               </div>
               
-              <div className="border-b border-slate-700 pb-2">
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-white">Breach:</span> When actual loss exceeds VaR prediction. With 95% confidence, we expect breaches 5% of the time.
+              <div className="col-span-1">
+                <p className="text-xs text-muted-foreground">99% Confidence</p>
+                <div className="h-2 w-full bg-slate-700 rounded-full mt-1 overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-dashboard-accent to-dashboard-negative" 
+                    style={{ width: `${(breachStats.parametricVaR99.breachPercentage/1)*100}%` }} 
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {breachStats.parametricVaR99.breachPercentage}% vs 1% expected
                 </p>
               </div>
-              
-              <div>
-                <p className="text-xs text-muted-foreground">
-                  <span className="font-medium text-white">Backtesting:</span> Comparing actual breaches to expected breaches validates model accuracy. Significantly more breaches than expected indicates poor risk estimation.
-                </p>
-              </div>
+            </div>
+            
+            <div className="mt-auto text-xs text-muted-foreground border-t border-slate-700 pt-2">
+              <p>Breaches should align with confidence level</p>
+              <p className="mt-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-dashboard-positive mr-1"></span>
+                Good: Fewer than expected
+              </p>
+              <p className="mt-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
+                Average: Close to expected
+              </p>
+              <p className="mt-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-dashboard-negative mr-1"></span>
+                Poor: More than expected
+              </p>
             </div>
           </div>
         </div>
