@@ -1,4 +1,3 @@
-
 import { mockStocks } from "@/data/mockData";
 import { useState, useEffect } from "react";
 import { 
@@ -42,7 +41,6 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
     'monteCarloVaR95',
   ]);
 
-  // Define all VaR methods
   const varMethods: VaRMethod[] = [
     { key: 'parametricVaR95', name: 'Parametric VaR 95%', color: '#ef4444', confidence: '95' },
     { key: 'monteCarloVaR95', name: 'Monte Carlo VaR 95%', color: '#f97316', confidence: '95' },
@@ -53,21 +51,16 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
   ];
 
   useEffect(() => {
-    // Find the selected stock
     const stock = mockStocks.find((s) => s.ticker === ticker);
     
     if (stock) {
-      // Get the price history for the specified number of days
       const priceData = stock.priceHistory.slice(-days);
       
-      // Calculate VaR lines values (for visual reference)
       const priceMin = Math.min(...priceData.map(d => d.price)) * 0.95;
       
-      // Add VaR levels for visualization
       const enhancedData = priceData.map((day) => {
         return {
           ...day,
-          // Add VaR threshold values for the lines
           parametricVaR95Line: priceMin * 1.05,
           monteCarloVaR95Line: priceMin * 1.04,
           deepVaR95Line: priceMin * 1.03,
@@ -99,7 +92,6 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
     );
   }
 
-  // Find min and max for price to set the y-axis domain
   const priceMin = Math.min(...chartData.map((d: any) => d.price)) * 0.95;
   const priceMax = Math.max(...chartData.map((d: any) => d.price)) * 1.05;
 
@@ -189,7 +181,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
             <Legend />
             <Line 
               yAxisId="left" 
-              type="monotone" 
+              type="natural" 
               dataKey="price" 
               name="Price" 
               stroke="#9b87f5" 
@@ -198,18 +190,18 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
             />
             <Area
               yAxisId="left"
-              type="monotone"
+              type="natural"
               dataKey="price"
               fill="#9b87f5"
               stroke="none"
               opacity={0.05}
+              legendType="none"
             />
             
-            {/* VaR level lines - Show only the selected ones */}
             {selectedVaRMethods.includes('parametricVaR95') && (
               <Line 
                 yAxisId="left" 
-                type="monotone" 
+                type="natural" 
                 dataKey="parametricVaR95Line" 
                 name="Parametric VaR 95%" 
                 stroke="#ef4444" 
@@ -221,7 +213,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
             {selectedVaRMethods.includes('monteCarloVaR95') && (
               <Line 
                 yAxisId="left" 
-                type="monotone" 
+                type="natural" 
                 dataKey="monteCarloVaR95Line" 
                 name="Monte Carlo VaR 95%" 
                 stroke="#f97316" 
@@ -233,7 +225,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
             {selectedVaRMethods.includes('deepVaR95') && (
               <Line 
                 yAxisId="left" 
-                type="monotone" 
+                type="natural" 
                 dataKey="deepVaR95Line" 
                 name="Deep VaR 95%" 
                 stroke="#eab308" 
@@ -245,7 +237,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
             {selectedVaRMethods.includes('parametricVaR99') && (
               <Line 
                 yAxisId="left" 
-                type="monotone" 
+                type="natural" 
                 dataKey="parametricVaR99Line" 
                 name="Parametric VaR 99%" 
                 stroke="#ec4899" 
@@ -257,7 +249,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
             {selectedVaRMethods.includes('monteCarloVaR99') && (
               <Line 
                 yAxisId="left" 
-                type="monotone" 
+                type="natural" 
                 dataKey="monteCarloVaR99Line" 
                 name="Monte Carlo VaR 99%" 
                 stroke="#8b5cf6" 
@@ -269,7 +261,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
             {selectedVaRMethods.includes('deepVaR99') && (
               <Line 
                 yAxisId="left" 
-                type="monotone" 
+                type="natural" 
                 dataKey="deepVaR99Line" 
                 name="Deep VaR 99%" 
                 stroke="#06b6d4" 
