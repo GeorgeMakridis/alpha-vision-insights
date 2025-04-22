@@ -1,4 +1,3 @@
-
 import { mockStocks } from "@/data/mockData";
 import { useState, useEffect } from "react";
 import { 
@@ -52,7 +51,6 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
   const priceMin = Math.min(...chartData.map(d => d.price)) * 0.95;
   const priceMax = Math.max(...chartData.map(d => d.price)) * 1.05;
 
-  // Custom tooltip formatter to improve clarity
   const tooltipFormatter = (value: any, name: string) => {
     switch (name) {
       case "Price":
@@ -157,12 +155,13 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               height={36}
               wrapperStyle={{ paddingTop: '10px' }}
               formatter={(value) => {
-                return value === "News Volume" ? "News Articles" : 
-                       value === "Sentiment" ? "Market Sentiment" : "Price";
+                if (value === "Price") return "Price";
+                if (value === "News Volume") return "News Articles";
+                if (value === "Sentiment") return "Market Sentiment";
+                return value;
               }}
             />
             
-            {/* Volume bars at the bottom */}
             <Bar 
               yAxisId="volume" 
               dataKey="volume" 
@@ -173,7 +172,6 @@ export default function AssetChart({ ticker, days = 30 }: AssetChartProps) {
               isAnimationActive={false}
             />
             
-            {/* Lines over the bars */}
             <Line 
               yAxisId="price" 
               type="monotone" 

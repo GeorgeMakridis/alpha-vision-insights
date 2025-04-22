@@ -1,4 +1,3 @@
-
 import { CardGradient } from "@/components/ui/card-gradient";
 import { mockStocks } from "@/data/mockData";
 import { AlertTriangle, Info } from "lucide-react";
@@ -47,19 +46,14 @@ export default function PortfolioVaRChart({
     // Calculate weighted VaR metrics only for DeepVaR 95 and DeepVaR 99 (approximate with parametricVaR95 and parametricVaR99)
     const varData = calculateWeightedVaRMetrics(selectedAssets, weights);
     
-    // Calculate the VaR levels based on the portfolio's minimum price
-    const priceMin = Math.min(...filteredData.map((d: any) => d.price)) * 0.9;
-    const priceMax = Math.max(...filteredData.map((d: any) => d.price)) * 1.05;
-    
-    // Enhance the data with only Deep VaR lines
+    // Enhance the data with only Deep VaR lines following price naturally (not horizontal)
     const enhancedData = filteredData.map((day: any) => {
       return {
         ...day,
-        // DeepVaR95 and DeepVaR99 lines approximated here:
+        // DeepVaR95 and DeepVaR99 lines approximate price * (1 - VaR)
         deepVaR95: day.price * (1 - varData.deepVaR95),
         deepVaR99: day.price * (1 - varData.deepVaR99),
 
-        // Percentage for tooltip if needed
         deepVaR95Pct: varData.deepVaR95 * 100,
         deepVaR99Pct: varData.deepVaR99 * 100,
       };
@@ -68,7 +62,6 @@ export default function PortfolioVaRChart({
     setChartData(enhancedData);
   }, [selectedAssets, weights, days]);
 
-  // Calculate weighted average VaR metrics only for deepVaR95 and deepVaR99 using approximations (use parametricVaR95 and parametricVaR99 as proxies)
   const calculateWeightedVaRMetrics = (
     selectedAssets: string[], 
     weights: Record<string, number>

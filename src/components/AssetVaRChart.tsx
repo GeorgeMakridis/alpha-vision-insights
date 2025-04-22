@@ -1,4 +1,3 @@
-
 import { mockStocks } from "@/data/mockData";
 import { useState, useEffect } from "react";
 import { 
@@ -56,18 +55,16 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
     
     if (stock) {
       const priceData = stock.priceHistory.slice(-days);
-      
-      const priceMin = Math.min(...priceData.map(d => d.price)) * 0.95;
-      
+
       const enhancedData = priceData.map((day) => {
         return {
           ...day,
-          parametricVaR95Line: priceMin * 1.05,
-          monteCarloVaR95Line: priceMin * 1.04,
-          deepVaR95Line: priceMin * 1.03,
-          parametricVaR99Line: priceMin * 1.02,
-          monteCarloVaR99Line: priceMin * 1.01,
-          deepVaR99Line: priceMin * 1.00
+          parametricVaR95Line: day.price * 0.95,
+          monteCarloVaR95Line: day.price * 0.94,
+          deepVaR95Line: day.price * 0.93,
+          parametricVaR99Line: day.price * 0.92,
+          monteCarloVaR99Line: day.price * 0.91,
+          deepVaR99Line: day.price * 0.90,
         };
       });
       
@@ -196,7 +193,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
               fill="#9b87f5"
               stroke="none"
               opacity={0.05}
-              legendType="none"  // prevent showing in legend to avoid duplicate
+              legendType="none"
             />
             
             {selectedVaRMethods.includes('parametricVaR95') && (
@@ -277,4 +274,3 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
     </CardGradient>
   );
 }
-
