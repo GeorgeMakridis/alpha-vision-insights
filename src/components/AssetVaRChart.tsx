@@ -1,3 +1,4 @@
+
 import { mockStocks } from "@/data/mockData";
 import { useState, useEffect } from "react";
 import { 
@@ -195,7 +196,7 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
               fill="#9b87f5"
               stroke="none"
               opacity={0.05}
-              legendType="none"
+              legendType="none"  // prevent showing in legend to avoid duplicate
             />
             
             {selectedVaRMethods.includes('parametricVaR95') && (
