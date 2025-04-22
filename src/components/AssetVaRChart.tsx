@@ -277,3 +277,4 @@ export default function AssetVaRChart({ ticker, days = 30 }: AssetVaRChartProps)
     </CardGradient>
   );
 }
+

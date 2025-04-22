@@ -13,7 +13,6 @@ import {
   Tooltip, 
   XAxis, 
   YAxis,
-  ReferenceLine
 } from "recharts";
 import { 
   Tooltip as UITooltip, 
@@ -45,69 +44,56 @@ export default function PortfolioVaRChart({
     const portfolioData = calculatePortfolioPriceHistory(selectedAssets, weights);
     const filteredData = portfolioData.slice(-days);
     
-    // Calculate weighted VaR metrics
+    // Calculate weighted VaR metrics only for DeepVaR 95 and DeepVaR 99 (approximate with parametricVaR95 and parametricVaR99)
     const varData = calculateWeightedVaRMetrics(selectedAssets, weights);
     
     // Calculate the VaR levels based on the portfolio's minimum price
     const priceMin = Math.min(...filteredData.map((d: any) => d.price)) * 0.9;
     const priceMax = Math.max(...filteredData.map((d: any) => d.price)) * 1.05;
     
-    // Enhance the data with VaR lines
+    // Enhance the data with only Deep VaR lines
     const enhancedData = filteredData.map((day: any) => {
       return {
         ...day,
-        // Historic VaR - 95% confidence
-        historicVaR95: day.price * (1 - varData.historicVaR95),
-        // Parametric VaR - 95% confidence 
-        parametricVaR95: day.price * (1 - varData.parametricVaR95),
-        // Monte Carlo VaR - 95% confidence
-        monteCarloVaR95: day.price * (1 - varData.monteCarloVaR95),
-        // Add VaR values as percentages for the tooltip
-        historicVaR95Pct: varData.historicVaR95 * 100,
-        parametricVaR95Pct: varData.parametricVaR95 * 100,
-        monteCarloVaR95Pct: varData.monteCarloVaR95 * 100,
+        // DeepVaR95 and DeepVaR99 lines approximated here:
+        deepVaR95: day.price * (1 - varData.deepVaR95),
+        deepVaR99: day.price * (1 - varData.deepVaR99),
+
+        // Percentage for tooltip if needed
+        deepVaR95Pct: varData.deepVaR95 * 100,
+        deepVaR99Pct: varData.deepVaR99 * 100,
       };
     });
     
     setChartData(enhancedData);
   }, [selectedAssets, weights, days]);
 
-  // Calculate weighted average VaR metrics from individual assets
+  // Calculate weighted average VaR metrics only for deepVaR95 and deepVaR99 using approximations (use parametricVaR95 and parametricVaR99 as proxies)
   const calculateWeightedVaRMetrics = (
     selectedAssets: string[], 
     weights: Record<string, number>
   ) => {
-    let historicVaR95 = 0;
-    let parametricVaR95 = 0;
-    let monteCarloVaR95 = 0;
+    let deepVaR95 = 0;
+    let deepVaR99 = 0;
     
     selectedAssets.forEach(ticker => {
       const stock = mockStocks.find(s => s.ticker === ticker);
       if (stock && weights[ticker]) {
-        // Weight the VaR metrics by the asset's portfolio weight
-        // Use 'metrics' instead of 'riskMetrics'
-        parametricVaR95 += stock.metrics.parametricVaR95 / 100 * weights[ticker];
-        monteCarloVaR95 += stock.metrics.monteCarloVaR95 / 100 * weights[ticker];
-        
-        // For historicVaR95, we'll use parametricVaR95 value since it's not in the data
-        // This is just an approximation
-        historicVaR95 += stock.metrics.parametricVaR95 / 100 * weights[ticker];
+        deepVaR95 += (stock.metrics.parametricVaR95 / 100) * weights[ticker];
+        deepVaR99 += (stock.metrics.parametricVaR99 / 100) * weights[ticker];
       }
     });
     
     return {
-      historicVaR95,
-      parametricVaR95,
-      monteCarloVaR95
+      deepVaR95,
+      deepVaR99,
     };
   };
 
-  // Helper function to calculate portfolio price history (similar to the one in mockData)
   const calculatePortfolioPriceHistory = (
     selectedAssets: string[], 
     weights: Record<string, number>
   ) => {
-    // Initialize with the first asset's price history structure
     const firstStock = mockStocks.find(s => s.ticker === selectedAssets[0]);
     if (!firstStock) return [];
     
@@ -118,12 +104,10 @@ export default function PortfolioVaRChart({
       sentiment: 0
     }));
     
-    // Calculate weighted average for each day
     selectedAssets.forEach(ticker => {
       const stock = mockStocks.find(s => s.ticker === ticker);
       if (stock && weights[ticker]) {
         stock.priceHistory.forEach((day, i) => {
-          // Ensure we're only processing days that exist in portfolioHistory
           if (i < portfolioHistory.length) {
             portfolioHistory[i].price += day.price * weights[ticker];
             portfolioHistory[i].volume += day.volume * weights[ticker];
@@ -153,7 +137,6 @@ export default function PortfolioVaRChart({
     );
   }
 
-  // Formatter for tooltip values
   const tooltipFormatter = (value: any, name: string) => {
     if (name === "price") {
       return [`$${value.toFixed(2)}`, "Portfolio Value"];
@@ -163,18 +146,14 @@ export default function PortfolioVaRChart({
       const sentiment = value >= 0.5 ? "Bullish" : value >= 0 ? "Slightly Bullish" : 
                         value >= -0.5 ? "Slightly Bearish" : "Bearish";
       return [`${value.toFixed(2)} (${sentiment})`, "Market Sentiment"];
-    } else if (name === "historicVaR95") {
-      return [`$${value.toFixed(2)}`, "Historical VaR (95%)"];
-    } else if (name === "parametricVaR95") {
-      return [`$${value.toFixed(2)}`, "Parametric VaR (95%)"];
-    } else if (name === "monteCarloVaR95") {
-      return [`$${value.toFixed(2)}`, "Monte Carlo VaR (95%)"];
-    } else if (name === "historicVaR95Pct") {
-      return [`${value.toFixed(2)}%`, "Historical VaR (95%)"];
-    } else if (name === "parametricVaR95Pct") {
-      return [`${value.toFixed(2)}%`, "Parametric VaR (95%)"];
-    } else if (name === "monteCarloVaR95Pct") {
-      return [`${value.toFixed(2)}%`, "Monte Carlo VaR (95%)"];
+    } else if (name === "deepVaR95") {
+      return [`$${value.toFixed(2)}`, "Deep VaR (95%)"];
+    } else if (name === "deepVaR99") {
+      return [`$${value.toFixed(2)}`, "Deep VaR (99%)"];
+    } else if (name === "deepVaR95Pct") {
+      return [`${value.toFixed(2)}%`, "Deep VaR (95%)"];
+    } else if (name === "deepVaR99Pct") {
+      return [`${value.toFixed(2)}%`, "Deep VaR (99%)"];
     }
     return [value, name];
   };
@@ -190,12 +169,11 @@ export default function PortfolioVaRChart({
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
               <p className="font-medium mb-1">Value at Risk (VaR) Analysis</p>
-              <p className="text-xs mb-2">This chart displays the portfolio price with VaR metrics representing potential loss at 95% confidence level.</p>
+              <p className="text-xs mb-2">This chart displays the portfolio price with VaR metrics representing potential loss at 95% and 99% confidence levels.</p>
               <ul className="list-disc list-inside space-y-1 text-xs">
                 <li><span className="text-[#8B5CF6] font-medium">Portfolio Price</span>: Current value</li>
-                <li><span className="text-[#F43F5E] font-medium">Historical VaR</span>: Based on past returns</li>
-                <li><span className="text-[#EC4899] font-medium">Parametric VaR</span>: Using normal distribution</li>
-                <li><span className="text-[#D946EF] font-medium">Monte Carlo VaR</span>: Simulated outcomes</li>
+                <li><span className="text-[#eab308] font-medium">Deep VaR 95%</span>: Estimated loss at 95% confidence</li>
+                <li><span className="text-[#06b6d4] font-medium">Deep VaR 99%</span>: Estimated loss at 99% confidence</li>
               </ul>
             </TooltipContent>
           </UITooltip>
@@ -250,7 +228,7 @@ export default function PortfolioVaRChart({
             {/* Portfolio price line */}
             <Line 
               yAxisId="price" 
-              type="monotone" 
+              type="natural" 
               dataKey="price" 
               name="Portfolio Value" 
               stroke="#8B5CF6" 
@@ -259,46 +237,34 @@ export default function PortfolioVaRChart({
               activeDot={{ r: 6, stroke: '#8B5CF6', strokeWidth: 1, fill: '#8B5CF6' }}
             />
             
-            {/* Historical VaR Line */}
+            {/* Deep VaR 95 Line */}
             <Line 
               yAxisId="price" 
-              type="monotone" 
-              dataKey="historicVaR95" 
-              name="Historical VaR (95%)" 
-              stroke="#F43F5E" 
+              type="natural" 
+              dataKey="deepVaR95" 
+              name="Deep VaR 95%" 
+              stroke="#eab308" 
               strokeWidth={2}
               strokeDasharray="3 3"
               dot={false}
             />
             
-            {/* Parametric VaR Line */}
+            {/* Deep VaR 99 Line */}
             <Line 
               yAxisId="price" 
-              type="monotone" 
-              dataKey="parametricVaR95" 
-              name="Parametric VaR (95%)" 
-              stroke="#EC4899" 
+              type="natural" 
+              dataKey="deepVaR99" 
+              name="Deep VaR 99%" 
+              stroke="#06b6d4" 
               strokeWidth={2}
               strokeDasharray="5 5"
-              dot={false}
-            />
-            
-            {/* Monte Carlo VaR Line */}
-            <Line 
-              yAxisId="price" 
-              type="monotone" 
-              dataKey="monteCarloVaR95" 
-              name="Monte Carlo VaR (95%)" 
-              stroke="#D946EF" 
-              strokeWidth={2}
-              strokeDasharray="7 7"
               dot={false}
             />
             
             {/* Area under the price line for visual emphasis */}
             <Area
               yAxisId="price"
-              type="monotone"
+              type="natural"
               dataKey="price"
               fill="#8B5CF6"
               stroke="none"
