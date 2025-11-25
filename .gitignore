@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Data files and directories
+backend/data/
+*.csv
+news_sentiment_*.json
+sp100_*.csv

@@ -1,6 +1,7 @@
 
 import { CardGradient } from "@/components/ui/card-gradient";
-import { mockStocks } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { apiService } from "@/services/api";
 import { AlertTriangle } from "lucide-react";
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
@@ -13,6 +14,12 @@ export default function PortfolioAllocationChart({
   selectedAssets,
   weights,
 }: PortfolioAllocationChartProps) {
+  // Fetch stocks data to get stock names
+  const { data: stocksData } = useQuery({
+    queryKey: ['stocks'],
+    queryFn: () => apiService.getStocks(),
+  });
+
   if (selectedAssets.length === 0) {
     return (
       <CardGradient className="h-[300px] flex flex-col items-center justify-center">
@@ -24,10 +31,10 @@ export default function PortfolioAllocationChart({
   
   // Prepare data for pie chart
   const data = selectedAssets.map(ticker => {
-    const stock = mockStocks.find(s => s.ticker === ticker);
+    const stock = stocksData?.stocks?.find(s => s.ticker === ticker);
     return {
       name: ticker,
-      fullName: stock?.name,
+      fullName: stock?.name || ticker,
       value: weights[ticker] * 100,
       color: getStockColor(ticker)
     };
@@ -49,7 +56,13 @@ export default function PortfolioAllocationChart({
               innerRadius={60}
               outerRadius={80}
               paddingAngle={2}
-              label={({ name, value }) => `${name} ${value.toFixed(0)}%`}
+              label={({ name, value }) => {
+                // Only show labels for segments with > 5% allocation to prevent overlap
+                if (value > 5) {
+                  return `${name} ${value.toFixed(2)}%`;
+                }
+                return '';
+              }}
               labelLine={false}
             >
               {data.map((entry) => (
@@ -57,7 +70,7 @@ export default function PortfolioAllocationChart({
               ))}
             </Pie>
             <Tooltip 
-              formatter={(value: number) => [`${value.toFixed(1)}%`, 'Allocation']}
+              formatter={(value: number) => [`${value.toFixed(2)}%`, 'Allocation']}
               contentStyle={{ backgroundColor: '#1A1F2C', borderColor: '#4B5563' }}
               labelStyle={{ color: '#E5E7EB' }}
               itemStyle={{ color: '#E5E7EB' }}
@@ -66,9 +79,11 @@ export default function PortfolioAllocationChart({
               layout="horizontal" 
               verticalAlign="bottom"
               align="center"
+              height={60}
+              wrapperStyle={{ paddingTop: '10px' }}
               formatter={(value: string, entry: any) => {
                 const item = data.find(d => d.name === value);
-                return <span style={{ color: '#E5E7EB' }}>{value} - {item?.fullName}</span>;
+                return <span style={{ color: '#E5E7EB', fontSize: '12px' }}>{value} - {item?.fullName}</span>;
               }}
             />
           </PieChart>

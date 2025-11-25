@@ -1,0 +1,12 @@
+---
+description: "Bug Fixing & Testing Guidelines"
+globs:
+alwaysApply: true
+---
+
+- **Reproduce and Understand:** When tackling a bug, first try to reproduce the issue reliably. Use logs, debug prints, or a debugger to trace the code and identify the root cause. Understanding *why* the bug occurs is crucial before attempting a fix. If an issue is reported by users, gather as much context as possible (inputs, environment, error messages) to pinpoint the problem area.  
+- **Isolate the Fault:** Once the cause is understood, isolate the faulty module or logic. Check if similar code elsewhere might have the same issue. This helps ensure the fix covers all occurrences of the pattern. For example, if a calculation is wrong due to an off-by-one error, see if that logic appears in multiple places.  
+- **Develop a Targeted Fix:** Implement the simplest possible fix that resolves the root cause without side effects. Avoid "band-aid" fixes that just hide the symptoms; address the underlying issue. Ensure that the fix aligns with the project’s coding standards and doesn’t break any other feature (run regression tests or manual tests on critical features after the change).  
+- **Add or Update Tests:** For every bug fixed, add a regression test when feasible. Write a test that would have failed before the fix but passes now, to prevent the bug from reoccurring. If the project has a test suite (unit tests, integration tests), update it to cover the scenario of the bug. If no formal tests exist, consider adding at least a simple check (even a script or example in the documentation) to demonstrate the fix’s effectiveness.  
+- **Code Comments for Fixes:** Comment the code around the fix if the reason for the bug or the fix might be non-obvious in the future. For instance, if a workaround is implemented to handle a library quirk or hardware-specific issue, note that in a comment with context. This will help maintainers understand the change later.  
+- **Verify and Close Loop:** After fixing, verify the bug is truly resolved in all intended cases (not just the original scenario). If the project uses issue tracking, ensure the issue is marked resolved and document the resolution. Double-check related functionalities that might be impacted. This thorough approach imitates how a careful senior developer would ensure the quality of the fix.  

@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # Backend API Service (Development)
+  alphavision-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend:/app
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    command: ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+    networks:
+      - alphavision-network
+
+  # Frontend Dashboard Service (Development)
+  alphavision-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - alphavision-backend
+    restart: unless-stopped
+    networks:
+      - alphavision-network
+
+networks:
+  alphavision-network:
+    driver: bridge 

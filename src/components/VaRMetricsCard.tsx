@@ -1,7 +1,9 @@
 
 import { CardGradient } from "@/components/ui/card-gradient";
-import { mockStocks } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { apiService, MetricsResponse } from "@/services/api";
 import { Sparkles, Info } from "lucide-react";
+import { useState } from "react";
 import { 
   HoverCard, 
   HoverCardTrigger, 
@@ -13,59 +15,54 @@ import {
   TooltipProvider,
   TooltipTrigger
 } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 interface VaRMetricsCardProps {
   ticker: string;
+  days?: number; // Period for backtesting (matches chart period)
 }
 
-export default function VaRMetricsCard({ ticker }: VaRMetricsCardProps) {
-  // Find the selected stock
-  const stock = mockStocks.find((s) => s.ticker === ticker);
+export default function VaRMetricsCard({ ticker, days }: VaRMetricsCardProps) {
+  // Fixed rolling window: 252 days (1 trading year)
+  const ROLLING_WINDOW = 252;
   
-  if (!stock) {
+  // Fetch metrics data from API with period and fixed rolling window
+  const { data: metricsData, isLoading, error } = useQuery({
+    queryKey: ['stock-metrics', ticker, days, ROLLING_WINDOW],
+    queryFn: () => apiService.getStockMetrics(ticker, days, ROLLING_WINDOW),
+    enabled: !!ticker,
+  });
+  
+  if (isLoading) {
     return (
       <CardGradient className="h-[240px] flex items-center justify-center">
-        <p className="text-muted-foreground">Please select a stock</p>
+        <p className="text-muted-foreground">Loading VaR metrics...</p>
       </CardGradient>
     );
   }
   
-  const { metrics } = stock;
+  if (error) {
+    return (
+      <CardGradient className="h-[240px] flex flex-col items-center justify-center">
+        <p className="text-dashboard-negative text-center">
+          Error loading VaR metrics: {error.message || 'Unknown error'}
+        </p>
+      </CardGradient>
+    );
+  }
   
-  // Simulated breach statistics
-  const breachStats = {
-    parametricVaR95: { 
-      breachCount: 7, 
-      breachPercentage: 2.3, 
-      expectedBreaches: 5.0 
-    },
-    monteCarloVaR95: { 
-      breachCount: 6, 
-      breachPercentage: 2.0, 
-      expectedBreaches: 5.0 
-    },
-    deepVaR95: { 
-      breachCount: 4, 
-      breachPercentage: 1.3, 
-      expectedBreaches: 5.0 
-    },
-    parametricVaR99: { 
-      breachCount: 2, 
-      breachPercentage: 0.7, 
-      expectedBreaches: 1.0 
-    },
-    monteCarloVaR99: { 
-      breachCount: 1, 
-      breachPercentage: 0.3, 
-      expectedBreaches: 1.0 
-    },
-    deepVaR99: { 
-      breachCount: 0, 
-      breachPercentage: 0.0, 
-      expectedBreaches: 1.0 
-    }
-  };
-
+  if (!metricsData?.metrics) {
+    return (
+      <CardGradient className="h-[240px] flex items-center justify-center">
+        <p className="text-muted-foreground">No metrics available for {ticker}</p>
+      </CardGradient>
+    );
+  }
+  
+  const metrics = metricsData.metrics;
+  const backtesting = (metricsData as MetricsResponse).backtesting || {};
+  
   // Helper function to determine breach status color
   const getBreachStatusColor = (actual: number, expected: number) => {
     const ratio = actual / expected;
@@ -74,12 +71,35 @@ export default function VaRMetricsCard({ ticker }: VaRMetricsCardProps) {
     return "text-dashboard-negative"; // More breaches than expected (bad)
   };
   
+  // Helper to get performance rating
+  const getPerformanceRating = (actual: number, expected: number) => {
+    const ratio = actual / expected;
+    if (ratio <= 0.7) return { label: "Excellent", color: "text-dashboard-positive", bg: "bg-dashboard-positive/10" };
+    if (ratio <= 0.9) return { label: "Good", color: "text-dashboard-positive", bg: "bg-dashboard-positive/10" };
+    if (ratio <= 1.1) return { label: "Acceptable", color: "text-yellow-500", bg: "bg-yellow-500/10" };
+    if (ratio <= 1.5) return { label: "Poor", color: "text-orange-500", bg: "bg-orange-500/10" };
+    return { label: "Very Poor", color: "text-dashboard-negative", bg: "bg-dashboard-negative/10" };
+  };
+
+  // Filter out methods with 0.0 values (unavailable)
+  // VaR values are negative, so we check for < 0 (valid) or == 0 (unavailable)
+  const availableMethods = [
+    { key: 'parametricVaR95', name: 'Parametric', var: metrics.parametricVaR95, backtest: backtesting.parametricVaR95 },
+    { key: 'monteCarloVaR95', name: 'Monte Carlo', var: metrics.monteCarloVaR95, backtest: backtesting.monteCarloVaR95 },
+    { key: 'parametricVaR99', name: 'Parametric', var: metrics.parametricVaR99, backtest: backtesting.parametricVaR99 },
+    { key: 'monteCarloVaR99', name: 'Monte Carlo', var: metrics.monteCarloVaR99, backtest: backtesting.monteCarloVaR99 },
+  ].filter(m => m.var < 0); // VaR is negative (loss), so filter for < 0
+
+  // Get period label
+  const periodLabel = days ? `Last ${days} days` : 'All available data';
+  
   return (
     <CardGradient>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="text-dashboard-accent h-5 w-5" />
-          <h3 className="text-lg font-medium">Value at Risk (VaR) Metrics & Backtesting</h3>
+          <h3 className="text-lg font-medium">Value at Risk (VaR) Metrics</h3>
+          <span className="text-xs text-muted-foreground">({periodLabel})</span>
         </div>
         <TooltipProvider>
           <Tooltip>
@@ -90,209 +110,178 @@ export default function VaRMetricsCard({ ticker }: VaRMetricsCardProps) {
             </TooltipTrigger>
             <TooltipContent side="left" className="max-w-xs">
               <div className="space-y-2">
-                <p className="text-sm">Value at Risk (VaR) estimates the maximum potential loss over a specific time horizon at a given confidence level.</p>
-                <p className="text-sm"><span className="font-medium">Breach:</span> When actual loss exceeds VaR prediction. With 95% confidence, we expect breaches 5% of the time.</p>
-                <p className="text-sm"><span className="font-medium">Backtesting:</span> Comparing actual breaches to expected breaches validates model accuracy. Significantly more breaches than expected indicates poor risk estimation.</p>
+                <p className="text-sm">VaR estimates maximum potential loss at a given confidence level.</p>
+                <p className="text-sm">Backtesting counts how many times actual losses exceeded the VaR threshold during the selected period.</p>
+                <p className="text-sm">Rolling window: {ROLLING_WINDOW} days (1 trading year) used to calculate VaR for each day.</p>
               </div>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
       
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* 95% Confidence VaR */}
-        <div className="col-span-2">
-          <div className="bg-slate-800/50 rounded-lg p-4 h-full">
-            <h4 className="text-sm font-medium text-muted-foreground mb-3">95% Confidence VaR</h4>
+        <div className="bg-slate-800/50 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-medium text-muted-foreground">95% Confidence Level</h4>
+            <span className="text-xs text-muted-foreground">{periodLabel}</span>
+          </div>
+          
+          <div className="space-y-3">
+            {/* Parametric VaR */}
+            {metrics.parametricVaR95 !== 0 && (
+              <div className="border border-slate-700 rounded-lg p-3">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm font-medium">Parametric VaR</p>
+                    <p className="text-xs text-muted-foreground">Normal distribution assumption</p>
+                  </div>
+                  <p className="text-xl font-bold text-dashboard-negative">
+                    {metrics.parametricVaR95 < 0 ? '' : '-'}{Math.abs(metrics.parametricVaR95).toFixed(2)}%
+                  </p>
+                </div>
+                {backtesting.parametricVaR95 && (
+                  <div className="mt-2 pt-2 border-t border-slate-700">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Breaches:</span>
+                      <span className="font-semibold text-dashboard-negative">
+                        {backtesting.parametricVaR95.breachCount} out of {backtesting.parametricVaR95.totalDays} days
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full ${getPerformanceRating(backtesting.parametricVaR95.breachCount, backtesting.parametricVaR95.expectedBreaches).bg}`}
+                          style={{ width: `${Math.min(100, (backtesting.parametricVaR95.breachCount / backtesting.parametricVaR95.totalDays) * 100)}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-medium ${getPerformanceRating(backtesting.parametricVaR95.breachCount, backtesting.parametricVaR95.expectedBreaches).color}`}>
+                        {getPerformanceRating(backtesting.parametricVaR95.breachCount, backtesting.parametricVaR95.expectedBreaches).label}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             
-            <div className="space-y-4">
-              {/* Parametric VaR */}
-              <div className="border-b border-slate-700 pb-3">
-                <div className="flex justify-between items-start mb-1">
-                  <HoverCard>
-                    <HoverCardTrigger asChild>
-                      <p className="text-sm cursor-help underline decoration-dotted underline-offset-4">Parametric VaR</p>
-                    </HoverCardTrigger>
-                    <HoverCardContent className="bg-slate-900 border-slate-800 text-xs">
-                      <p>Parametric VaR uses a normal distribution assumption to calculate risk.</p>
-                    </HoverCardContent>
-                  </HoverCard>
-                  <p className="text-lg font-semibold text-dashboard-negative">-{metrics.parametricVaR95.toFixed(2)}%</p>
+            {/* Monte Carlo VaR */}
+            {metrics.monteCarloVaR95 !== 0 && (
+              <div className="border border-slate-700 rounded-lg p-3">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm font-medium">Monte Carlo VaR</p>
+                    <p className="text-xs text-muted-foreground">Simulation-based estimation</p>
+                  </div>
+                  <p className="text-xl font-bold text-dashboard-negative">
+                    {metrics.monteCarloVaR95 < 0 ? '' : '-'}{Math.abs(metrics.monteCarloVaR95).toFixed(2)}%
+                  </p>
                 </div>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Breaches: {breachStats.parametricVaR95.breachCount}</span>
-                  <span className={getBreachStatusColor(breachStats.parametricVaR95.breachCount, breachStats.parametricVaR95.expectedBreaches)}>
-                    {breachStats.parametricVaR95.breachPercentage}% (Expected: 5%)
-                  </span>
-                </div>
+                {backtesting.monteCarloVaR95 && (
+                  <div className="mt-2 pt-2 border-t border-slate-700">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Breaches:</span>
+                      <span className="font-semibold text-dashboard-negative">
+                        {backtesting.monteCarloVaR95.breachCount} out of {backtesting.monteCarloVaR95.totalDays} days
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full ${getPerformanceRating(backtesting.monteCarloVaR95.breachCount, backtesting.monteCarloVaR95.expectedBreaches).bg}`}
+                          style={{ width: `${Math.min(100, (backtesting.monteCarloVaR95.breachCount / backtesting.monteCarloVaR95.totalDays) * 100)}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-medium ${getPerformanceRating(backtesting.monteCarloVaR95.breachCount, backtesting.monteCarloVaR95.expectedBreaches).color}`}>
+                        {getPerformanceRating(backtesting.monteCarloVaR95.breachCount, backtesting.monteCarloVaR95.expectedBreaches).label}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-              
-              {/* Monte Carlo VaR */}
-              <div className="border-b border-slate-700 pb-3">
-                <div className="flex justify-between items-start mb-1">
-                  <HoverCard>
-                    <HoverCardTrigger asChild>
-                      <p className="text-sm cursor-help underline decoration-dotted underline-offset-4">Monte Carlo VaR</p>
-                    </HoverCardTrigger>
-                    <HoverCardContent className="bg-slate-900 border-slate-800 text-xs">
-                      <p>Monte Carlo VaR uses simulations to estimate potential losses.</p>
-                    </HoverCardContent>
-                  </HoverCard>
-                  <p className="text-lg font-semibold text-dashboard-negative">-{metrics.monteCarloVaR95.toFixed(2)}%</p>
-                </div>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Breaches: {breachStats.monteCarloVaR95.breachCount}</span>
-                  <span className={getBreachStatusColor(breachStats.monteCarloVaR95.breachCount, breachStats.monteCarloVaR95.expectedBreaches)}>
-                    {breachStats.monteCarloVaR95.breachPercentage}% (Expected: 5%)
-                  </span>
-                </div>
-              </div>
-              
-              {/* DeepVaR */}
-              <div>
-                <div className="flex justify-between items-start mb-1">
-                  <HoverCard>
-                    <HoverCardTrigger asChild>
-                      <p className="text-sm cursor-help underline decoration-dotted underline-offset-4">DeepVaR</p>
-                    </HoverCardTrigger>
-                    <HoverCardContent className="bg-slate-900 border-slate-800 text-xs">
-                      <p>DeepVaR uses neural networks to predict market risk.</p>
-                    </HoverCardContent>
-                  </HoverCard>
-                  <p className="text-lg font-semibold text-dashboard-negative">-{metrics.deepVaR95.toFixed(2)}%</p>
-                </div>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Breaches: {breachStats.deepVaR95.breachCount}</span>
-                  <span className={getBreachStatusColor(breachStats.deepVaR95.breachCount, breachStats.deepVaR95.expectedBreaches)}>
-                    {breachStats.deepVaR95.breachPercentage}% (Expected: 5%)
-                  </span>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
         
         {/* 99% Confidence VaR */}
-        <div className="col-span-2">
-          <div className="bg-slate-800/50 rounded-lg p-4 h-full">
-            <h4 className="text-sm font-medium text-muted-foreground mb-3">99% Confidence VaR</h4>
-            
-            <div className="space-y-4">
-              {/* Parametric VaR */}
-              <div className="border-b border-slate-700 pb-3">
-                <div className="flex justify-between items-start mb-1">
-                  <HoverCard>
-                    <HoverCardTrigger asChild>
-                      <p className="text-sm cursor-help underline decoration-dotted underline-offset-4">Parametric VaR</p>
-                    </HoverCardTrigger>
-                    <HoverCardContent className="bg-slate-900 border-slate-800 text-xs">
-                      <p>Parametric VaR uses a normal distribution assumption to calculate risk.</p>
-                    </HoverCardContent>
-                  </HoverCard>
-                  <p className="text-lg font-semibold text-dashboard-negative">-{metrics.parametricVaR99.toFixed(2)}%</p>
-                </div>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Breaches: {breachStats.parametricVaR99.breachCount}</span>
-                  <span className={getBreachStatusColor(breachStats.parametricVaR99.breachCount, breachStats.parametricVaR99.expectedBreaches)}>
-                    {breachStats.parametricVaR99.breachPercentage}% (Expected: 1%)
-                  </span>
-                </div>
-              </div>
-              
-              {/* Monte Carlo VaR */}
-              <div className="border-b border-slate-700 pb-3">
-                <div className="flex justify-between items-start mb-1">
-                  <HoverCard>
-                    <HoverCardTrigger asChild>
-                      <p className="text-sm cursor-help underline decoration-dotted underline-offset-4">Monte Carlo VaR</p>
-                    </HoverCardTrigger>
-                    <HoverCardContent className="bg-slate-900 border-slate-800 text-xs">
-                      <p>Monte Carlo VaR uses simulations to estimate potential losses.</p>
-                    </HoverCardContent>
-                  </HoverCard>
-                  <p className="text-lg font-semibold text-dashboard-negative">-{metrics.monteCarloVaR99.toFixed(2)}%</p>
-                </div>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Breaches: {breachStats.monteCarloVaR99.breachCount}</span>
-                  <span className={getBreachStatusColor(breachStats.monteCarloVaR99.breachCount, breachStats.monteCarloVaR99.expectedBreaches)}>
-                    {breachStats.monteCarloVaR99.breachPercentage}% (Expected: 1%)
-                  </span>
-                </div>
-              </div>
-              
-              {/* DeepVaR */}
-              <div>
-                <div className="flex justify-between items-start mb-1">
-                  <HoverCard>
-                    <HoverCardTrigger asChild>
-                      <p className="text-sm cursor-help underline decoration-dotted underline-offset-4">DeepVaR</p>
-                    </HoverCardTrigger>
-                    <HoverCardContent className="bg-slate-900 border-slate-800 text-xs">
-                      <p>DeepVaR uses neural networks to predict market risk.</p>
-                    </HoverCardContent>
-                  </HoverCard>
-                  <p className="text-lg font-semibold text-dashboard-negative">-{metrics.deepVaR99.toFixed(2)}%</p>
-                </div>
-                <div className="flex justify-between items-center text-xs text-muted-foreground">
-                  <span>Breaches: {breachStats.deepVaR99.breachCount}</span>
-                  <span className={getBreachStatusColor(breachStats.deepVaR99.breachCount, breachStats.deepVaR99.expectedBreaches)}>
-                    {breachStats.deepVaR99.breachPercentage}% (Expected: 1%)
-                  </span>
-                </div>
-              </div>
-            </div>
+        <div className="bg-slate-800/50 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h4 className="text-sm font-medium text-muted-foreground">99% Confidence Level</h4>
+            <span className="text-xs text-muted-foreground">{periodLabel}</span>
           </div>
-        </div>
-        
-        {/* Charts preview column - kept the same width but replaced content */}
-        <div className="col-span-2">
-          <div className="bg-slate-800/50 rounded-lg p-4 h-full flex flex-col gap-2">
-            {/* Add any additional content you want in this space */}
-            <h4 className="text-sm font-medium text-muted-foreground mb-1">Breach Statistics</h4>
-            
-            <div className="grid grid-cols-2 gap-2">
-              <div className="col-span-1">
-                <p className="text-xs text-muted-foreground">95% Confidence</p>
-                <div className="h-2 w-full bg-slate-700 rounded-full mt-1 overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-dashboard-accent to-dashboard-negative" 
-                    style={{ width: `${(breachStats.parametricVaR95.breachPercentage/5)*100}%` }} 
-                  />
+          
+          <div className="space-y-3">
+            {/* Parametric VaR */}
+            {metrics.parametricVaR99 < 0 && (
+              <div className="border border-slate-700 rounded-lg p-3">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm font-medium">Parametric VaR</p>
+                    <p className="text-xs text-muted-foreground">Normal distribution assumption</p>
+                  </div>
+                  <p className="text-xl font-bold text-dashboard-negative">
+                    {metrics.parametricVaR99 < 0 ? '' : '-'}{Math.abs(metrics.parametricVaR99).toFixed(2)}%
+                  </p>
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  {breachStats.parametricVaR95.breachPercentage}% vs 5% expected
-                </p>
+                {backtesting.parametricVaR99 && (
+                  <div className="mt-2 pt-2 border-t border-slate-700">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Breaches:</span>
+                      <span className="font-semibold text-dashboard-negative">
+                        {backtesting.parametricVaR99.breachCount} out of {backtesting.parametricVaR99.totalDays} days
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full ${getPerformanceRating(backtesting.parametricVaR99.breachCount, backtesting.parametricVaR99.expectedBreaches).bg}`}
+                          style={{ width: `${Math.min(100, (backtesting.parametricVaR99.breachCount / backtesting.parametricVaR99.totalDays) * 100)}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-medium ${getPerformanceRating(backtesting.parametricVaR99.breachCount, backtesting.parametricVaR99.expectedBreaches).color}`}>
+                        {getPerformanceRating(backtesting.parametricVaR99.breachCount, backtesting.parametricVaR99.expectedBreaches).label}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-              
-              <div className="col-span-1">
-                <p className="text-xs text-muted-foreground">99% Confidence</p>
-                <div className="h-2 w-full bg-slate-700 rounded-full mt-1 overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-dashboard-accent to-dashboard-negative" 
-                    style={{ width: `${(breachStats.parametricVaR99.breachPercentage/1)*100}%` }} 
-                  />
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  {breachStats.parametricVaR99.breachPercentage}% vs 1% expected
-                </p>
-              </div>
-            </div>
+            )}
             
-            <div className="mt-auto text-xs text-muted-foreground border-t border-slate-700 pt-2">
-              <p>Breaches should align with confidence level</p>
-              <p className="mt-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-dashboard-positive mr-1"></span>
-                Good: Fewer than expected
-              </p>
-              <p className="mt-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1"></span>
-                Average: Close to expected
-              </p>
-              <p className="mt-1">
-                <span className="inline-block w-2 h-2 rounded-full bg-dashboard-negative mr-1"></span>
-                Poor: More than expected
-              </p>
-            </div>
+            {/* Monte Carlo VaR */}
+            {metrics.monteCarloVaR99 < 0 && (
+              <div className="border border-slate-700 rounded-lg p-3">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="text-sm font-medium">Monte Carlo VaR</p>
+                    <p className="text-xs text-muted-foreground">Simulation-based estimation</p>
+                  </div>
+                  <p className="text-xl font-bold text-dashboard-negative">
+                    {metrics.monteCarloVaR99 < 0 ? '' : '-'}{Math.abs(metrics.monteCarloVaR99).toFixed(2)}%
+                  </p>
+                </div>
+                {backtesting.monteCarloVaR99 && (
+                  <div className="mt-2 pt-2 border-t border-slate-700">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-muted-foreground">Breaches:</span>
+                      <span className="font-semibold text-dashboard-negative">
+                        {backtesting.monteCarloVaR99.breachCount} out of {backtesting.monteCarloVaR99.totalDays} days
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                        <div 
+                          className={`h-full ${getPerformanceRating(backtesting.monteCarloVaR99.breachCount, backtesting.monteCarloVaR99.expectedBreaches).bg}`}
+                          style={{ width: `${Math.min(100, (backtesting.monteCarloVaR99.breachCount / backtesting.monteCarloVaR99.totalDays) * 100)}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-medium ${getPerformanceRating(backtesting.monteCarloVaR99.breachCount, backtesting.monteCarloVaR99.expectedBreaches).color}`}>
+                        {getPerformanceRating(backtesting.monteCarloVaR99.breachCount, backtesting.monteCarloVaR99.expectedBreaches).label}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>

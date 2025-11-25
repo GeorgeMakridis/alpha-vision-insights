@@ -1,6 +1,7 @@
 
 import { CardGradient } from "@/components/ui/card-gradient";
-import { mockStocks, formatPercent } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { apiService } from "@/services/api";
 import { BarChart, TrendingUp, Activity, ArrowDownRight } from "lucide-react";
 
 interface MetricsSummaryCardProps {
@@ -8,18 +9,40 @@ interface MetricsSummaryCardProps {
 }
 
 export default function MetricsSummaryCard({ ticker }: MetricsSummaryCardProps) {
-  // Find the selected stock
-  const stock = mockStocks.find((s) => s.ticker === ticker);
+  // Fetch metrics data from API
+  const { data: metricsData, isLoading, error } = useQuery({
+    queryKey: ['stock-metrics', ticker],
+    queryFn: () => apiService.getStockMetrics(ticker),
+    enabled: !!ticker,
+  });
   
-  if (!stock) {
+  if (isLoading) {
     return (
       <CardGradient className="h-[240px] flex items-center justify-center">
-        <p className="text-muted-foreground">Please select a stock</p>
+        <p className="text-muted-foreground">Loading metrics...</p>
       </CardGradient>
     );
   }
   
-  const { metrics } = stock;
+  if (error) {
+    return (
+      <CardGradient className="h-[240px] flex items-center justify-center">
+        <p className="text-dashboard-negative">
+          Error loading metrics: {error.message || 'Unknown error'}
+        </p>
+      </CardGradient>
+    );
+  }
+  
+  if (!metricsData?.metrics) {
+    return (
+      <CardGradient className="h-[240px] flex items-center justify-center">
+        <p className="text-muted-foreground">No metrics available for {ticker}</p>
+      </CardGradient>
+    );
+  }
+  
+  const metrics = metricsData.metrics;
   
   // Determine classes based on value
   const getColorClass = (value: number) => {
@@ -27,30 +50,21 @@ export default function MetricsSummaryCard({ ticker }: MetricsSummaryCardProps) 
   };
   
   return (
-    <CardGradient>
-      <div className="flex items-center gap-2 mb-4">
-        <BarChart className="text-dashboard-accent h-5 w-5" />
-        <h3 className="text-lg font-medium">Performance Metrics</h3>
+    <CardGradient className="h-auto">
+      <div className="flex items-center gap-2 mb-3">
+        <BarChart className="text-dashboard-accent h-4 w-4" />
+        <h3 className="text-base font-medium">Performance Metrics</h3>
       </div>
       
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
         {/* Sharpe Ratio */}
         <div className="col-span-1">
-          <div className="flex items-start gap-3">
-            <div className="mt-1 p-2 bg-slate-800/60 rounded-md">
-              <TrendingUp className="h-4 w-4 text-dashboard-accent" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Sharpe Ratio</p>
-              <p className={`text-lg font-semibold ${metrics.sharpeRatio >= 1 ? 'text-dashboard-positive' : metrics.sharpeRatio >= 0 ? 'text-yellow-500' : 'text-dashboard-negative'}`}>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-3 w-3 text-dashboard-accent" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Sharpe Ratio</p>
+              <p className="text-base font-semibold text-dashboard-positive">
                 {metrics.sharpeRatio.toFixed(2)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {metrics.sharpeRatio >= 1 
-                  ? 'Excellent risk-adjusted return' 
-                  : metrics.sharpeRatio >= 0 
-                    ? 'Average risk-adjusted return' 
-                    : 'Poor risk-adjusted return'}
               </p>
             </div>
           </div>
@@ -58,21 +72,12 @@ export default function MetricsSummaryCard({ ticker }: MetricsSummaryCardProps) 
         
         {/* Volatility */}
         <div className="col-span-1">
-          <div className="flex items-start gap-3">
-            <div className="mt-1 p-2 bg-slate-800/60 rounded-md">
-              <Activity className="h-4 w-4 text-dashboard-accent" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Volatility</p>
-              <p className="text-lg font-semibold">
+          <div className="flex items-center gap-2">
+            <Activity className="h-3 w-3 text-dashboard-accent" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Volatility</p>
+              <p className="text-base font-semibold text-dashboard-negative">
                 {metrics.volatility.toFixed(2)}%
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {metrics.volatility < 15 
-                  ? 'Low price fluctuation' 
-                  : metrics.volatility < 30 
-                    ? 'Moderate price fluctuation' 
-                    : 'High price fluctuation'}
               </p>
             </div>
           </div>
@@ -80,19 +85,12 @@ export default function MetricsSummaryCard({ ticker }: MetricsSummaryCardProps) 
         
         {/* Returns */}
         <div className="col-span-1">
-          <div className="flex items-start gap-3">
-            <div className="mt-1 p-2 bg-slate-800/60 rounded-md">
-              <TrendingUp className={`h-4 w-4 ${getColorClass(metrics.returns)}`} />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Returns</p>
-              <p className={`text-lg font-semibold ${getColorClass(metrics.returns)}`}>
-                {formatPercent(metrics.returns)}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {metrics.returns > 0 
-                  ? 'Positive performance' 
-                  : 'Negative performance'}
+          <div className="flex items-center gap-2">
+            <TrendingUp className={`h-3 w-3 ${getColorClass(metrics.returns)}`} />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Returns</p>
+              <p className="text-base font-semibold text-dashboard-positive">
+                {metrics.returns > 0 ? '+' : ''}{metrics.returns.toFixed(2)}%
               </p>
             </div>
           </div>
@@ -100,21 +98,12 @@ export default function MetricsSummaryCard({ ticker }: MetricsSummaryCardProps) 
         
         {/* Maximum Drawdown */}
         <div className="col-span-1">
-          <div className="flex items-start gap-3">
-            <div className="mt-1 p-2 bg-slate-800/60 rounded-md">
-              <ArrowDownRight className="h-4 w-4 text-dashboard-negative" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Maximum Drawdown</p>
-              <p className="text-lg font-semibold text-dashboard-negative">
+          <div className="flex items-center gap-2">
+            <ArrowDownRight className="h-3 w-3 text-dashboard-negative" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">Max Drawdown</p>
+              <p className="text-base font-semibold text-dashboard-negative">
                 {metrics.maxDrawdown.toFixed(2)}%
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {Math.abs(metrics.maxDrawdown) < 10 
-                  ? 'Low historical decline' 
-                  : Math.abs(metrics.maxDrawdown) < 20 
-                    ? 'Moderate historical decline' 
-                    : 'Severe historical decline'}
               </p>
             </div>
           </div>

@@ -1,0 +1,12 @@
+---
+description: "Documentation & Comment Guidelines"
+globs:
+alwaysApply: true
+---
+
+- **Update README and Docs:** Whenever a new feature is added or a significant change is made, update the project’s README.md or documentation files to reflect it. Provide usage examples, explanations of new modules or commands, and any setup or configuration changes required. Documentation should be written in clear, concise language with short paragraphs for readability.  
+- **Write Descriptive Docstrings:** For every public function, class, or module in the code, include a docstring (in Python, use triple quotes) that describes its purpose, parameters, return values, and any exceptions raised. Follow the style (Google style, NumPy style, or other) that the project currently uses for docstrings, if any, to keep consistency. This helps future developers (and the AI) understand the code’s intent.  
+- **Inline Comments for Complex Logic:** If a section of code has non-obvious logic, algorithms, or workarounds, add inline comments to clarify the intent or reasoning. However, avoid redundant comments for self-explanatory code. Strive to explain the "why" behind code decisions, not just restate the "what."  
+- **Maintain Consistency in Docs:** Format documentation consistently. For example, if the project documentation uses certain markdown conventions (like `###` for subheadings, bullet points for features, etc.), follow the same format when adding new documentation sections. Keep the tone and terminology consistent with existing docs (e.g., if the project calls users “clients” or uses certain domain terms, continue with that language).  
+- **Changelog or Release Notes:** If the project maintains a changelog, ensure each new feature or bug fix is noted there with a brief description. Similarly, update any version numbers or release notes as needed when changes are significant. This keeps users and contributors informed about modifications.  
+- **External References:** If adding any external references or citations in documentation (e.g., linking to research papers or libraries), ensure the links are valid and accompanied by a brief explanation of relevance. Document any new dependency or library introduced: why it’s needed and how it’s used in the project.  

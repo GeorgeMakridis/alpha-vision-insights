@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  alphavision-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./backend/data:/app/data
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - BLNN_VAR_API_URL=${BLNN_VAR_API_URL:-}
+      - DEEP_VAR_API_URL=${DEEP_VAR_API_URL:-}
+      - VAR_API_TIMEOUT=${VAR_API_TIMEOUT:-5.0}
+      - VAR_ROLLING_WINDOW_DAYS=${VAR_ROLLING_WINDOW_DAYS:-252}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 600s
+    networks:
+      - alphavision-network
+
+  # Frontend Dashboard Service
+  alphavision-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8001
+    environment:
+      - VITE_API_URL=http://localhost:8001
+    ports:
+      - "8081:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      alphavision-backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - alphavision-network
+
+networks:
+  alphavision-network:
+    driver: bridge 

@@ -1,73 +1,220 @@
-# Welcome to your Lovable project
+# AlphaVision Insights - Financial Risk Analytics Dashboard
 
-## Project info
+A comprehensive financial risk analytics platform with real-time data visualization, portfolio analysis, and advanced risk metrics.
 
-**URL**: https://lovable.dev/projects/deb8cdf0-847a-4d34-9e17-45f13ab63de3
+## 🏗️ Architecture
 
-## How can I edit this code?
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   Backend       │    │   Data Files    │
+│   (React/Vite)  │◄──►│   (FastAPI)     │◄──►│   (CSV/JSON)    │
+│   Port: 8080    │    │   Port: 8000    │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
-There are several ways of editing your application.
+## 🚀 Quick Start (Docker)
 
-**Use Lovable**
+### Option 1: Automated Deployment
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/deb8cdf0-847a-4d34-9e17-45f13ab63de3) and start prompting.
+```bash
+# Deploy the complete stack
+./deploy.sh production
 
-Changes made via Lovable will be committed automatically to this repo.
+# Or for development with hot reload
+./deploy.sh development
+```
 
-**Use your preferred IDE**
+### Option 2: Manual Docker Compose
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```bash
+# Setup backend data
+cd backend && ./setup.sh && cd ..
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+# Deploy production stack
+docker-compose up --build -d
 
-Follow these steps:
+# Or development stack
+docker-compose -f docker-compose.dev.yml up --build -d
+```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Option 3: Development Setup
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+./setup.sh
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Frontend (new terminal)
+npm install
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## 📊 Features
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- **Real-time Stock Data**: Historical prices for S&P 100 stocks
+- **News Sentiment Analysis**: News headlines with sentiment scores
+- **Risk Metrics**: VaR, volatility, Sharpe ratio calculations
+- **Portfolio Analysis**: Multi-asset portfolio management
+- **Interactive Charts**: Real-time data visualization
+- **Responsive Design**: Mobile-friendly dashboard
 
-**Use GitHub Codespaces**
+## 🔧 Technology Stack
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Frontend
+- **React 18** + TypeScript
+- **Vite** - Fast build tool
+- **shadcn/ui** - Modern UI components
+- **Tailwind CSS** - Utility-first CSS
+- **Recharts** - Data visualization
+- **React Query** - Data fetching
 
-## What technologies are used for this project?
+### Backend
+- **FastAPI** - Modern Python web framework
+- **Pandas** - Data processing
+- **NumPy** - Numerical computations
+- **Docker** - Containerization
 
-This project is built with:
+### Data
+- **S&P 100 Price Data**: 6,325 days of historical prices
+- **News Sentiment**: 102MB of news articles with sentiment analysis
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 🐳 Docker Services
 
-## How can I deploy this project?
+### Production Stack
+- **alphavision-frontend**: React dashboard (port 8080)
+- **alphavision-backend**: FastAPI API (port 8000)
 
-Simply open [Lovable](https://lovable.dev/projects/deb8cdf0-847a-4d34-9e17-45f13ab63de3) and click on Share -> Publish.
+### Development Stack
+- Hot reloading for both frontend and backend
+- Volume mounting for live code changes
+- Development dependencies included
 
-## Can I connect a custom domain to my Lovable project?
+## 📋 Available Commands
 
-Yes, you can!
+```bash
+# Deployment
+./deploy.sh production     # Deploy production stack
+./deploy.sh development    # Deploy development stack
+./deploy.sh logs          # Show service logs
+./deploy.sh stop          # Stop all services
+./deploy.sh cleanup       # Clean up Docker resources
+./deploy.sh health        # Check service health
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+# Docker Compose
+docker-compose up --build -d                    # Production
+docker-compose -f docker-compose.dev.yml up --build -d  # Development
+docker-compose down                              # Stop services
+docker-compose logs -f                          # View logs
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+## 🔌 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| GET | `/api/stocks` | List all stocks |
+| GET | `/api/stocks/{ticker}/price-history` | Stock price data |
+| GET | `/api/stocks/{ticker}/news` | News headlines |
+| GET | `/api/stocks/{ticker}/metrics` | Risk metrics |
+| POST | `/api/portfolio/metrics` | Portfolio calculations |
+| POST | `/api/portfolio/price-history` | Portfolio charts |
+| GET | `/api/market/summary` | Market statistics |
+
+## 🌐 Access Points
+
+Once deployed, access the application at:
+
+- **Dashboard**: http://localhost:8080
+- **API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+
+## 📁 Project Structure
+
+```
+alpha-vision-insights/
+├── src/                    # Frontend source code
+│   ├── components/         # React components
+│   ├── services/          # API service layer
+│   └── pages/             # Page components
+├── backend/               # Backend API
+│   ├── main.py           # FastAPI application
+│   ├── data/             # Data files
+│   └── requirements.txt   # Python dependencies
+├── Dockerfile             # Frontend container
+├── Dockerfile.dev         # Frontend dev container
+├── docker-compose.yml     # Production stack
+├── docker-compose.dev.yml # Development stack
+└── deploy.sh             # Deployment script
+```
+
+## 🔍 Monitoring
+
+### Health Checks
+- Backend: `curl http://localhost:8000/health`
+- Frontend: `curl http://localhost:8080`
+
+### Logs
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f alphavision-backend
+docker-compose logs -f alphavision-frontend
+```
+
+## 🚨 Troubleshooting
+
+### Common Issues
+
+1. **Port conflicts**
+   ```bash
+   # Check what's using the ports
+   lsof -i :8080
+   lsof -i :8000
+   ```
+
+2. **Data files missing**
+   ```bash
+   # Ensure data files are in root directory
+   ls -la sp100_daily_prices.csv news_sentiment_updated.json
+   ```
+
+3. **Docker not running**
+   ```bash
+   # Start Docker Desktop
+   # Then run deployment
+   ./deploy.sh production
+   ```
+
+### Performance Optimization
+
+- **Backend**: Data cached in memory on startup
+- **Frontend**: React Query provides client-side caching
+- **Docker**: Volume mounting for data persistence
+
+## 🔐 Security
+
+- CORS configured for frontend domains
+- Input validation on all endpoints
+- Proper error handling
+- Health checks for monitoring
+
+## 📈 Next Steps
+
+1. **Authentication**: Add user authentication
+2. **Real-time Updates**: WebSocket integration
+3. **Advanced Analytics**: More sophisticated risk models
+4. **Data Pipeline**: Automated data updates
+5. **Monitoring**: Application monitoring and logging
+
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+**For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md)**

@@ -1,0 +1,11 @@
+---
+description: "Rule Maintenance & Updates"
+globs:
+alwaysApply: true
+---
+
+- **Adapt Rules to Changes:** Whenever the project undergoes significant changes (new frameworks, major architectural shifts, new coding standards), update these rules to reflect the new reality. The guidelines should never become outdated – they must mirror the current best practices of *Alpha Vision Insights*.  
+- **AI-Initiated Rule Generation:** Leverage Cursor’s capabilities to keep rules current. If during a development session the AI finds itself following a new repeated decision or notices a new pattern (for example, a new directory structure or a new style convention), it should use the `/Generate Cursor Rules` command:contentReference[oaicite:6]{index=6} or suggest a rule update. This ensures future completions automatically include the latest decisions.  
+- **Review Rule Relevance:** Periodically review all active rules to ensure they are still applicable. Remove or revise any guidance that is no longer valid. For instance, if a rule said "use library X" but the project later replaces X with another solution, the rule must be updated to avoid confusion.  
+- **Project Growth Consideration:** As the project grows in scope (e.g., adding a mobile app, additional services, or expanding to new domains), add new rule files for those domains or extend existing ones with careful scope. You can create subfolder-specific rules (placing `.cursor/rules` in subdirectories) if needed to target guidelines to a particular part of the project:contentReference[oaicite:7]{index=7}.  
+- **Document Rule Changes:** When rules are updated, treat the change like a documentation update – briefly note *what* changed and *why*. This could be in a comment within the rule file or in commit messages. It helps maintainers understand the evolution of the project’s best practices.  

@@ -1,0 +1,13 @@
+---
+description: "Architecture & Design Guidelines"
+globs:
+alwaysApply: true
+---
+
+- **Use Proven Architecture:** Design new components or features following a modular, scalable architecture. Separate concerns (e.g., data processing, business logic, UI) into appropriate modules or layers for clarity and maintainability.  
+- **Consistent Tech Stack:** Utilize Python for backend services or processing tasks (as planned), and continue using existing frameworks/languages for other parts of the project. Avoid introducing new frameworks or libraries unless absolutely necessary and beneficial.  
+- **Framework Choices:** When adding backend functionality, prefer well-established Python frameworks (e.g., Flask/FastAPI for web APIs, if a web service is needed) that fit the project’s size and needs:contentReference[oaicite:0]{index=0}. On the frontend or other layers, stick to the technologies already adopted in the project to maintain consistency.  
+- **Senior Engineer Mindset:** For any major decision, choose the solution a seasoned architect would – prioritize code quality, scalability, and long-term maintainability over quick fixes. Avoid hacky or overly complex solutions when a simpler, robust approach exists.  
+- **Performance and Reliability:** Design systems with performance in mind (efficient algorithms and data structures) and ensure reliability (error handling, edge case consideration). If the project involves heavy data (e.g., image processing or ML models), consider efficiency (batching, caching results, using vectorized operations) to keep the application responsive.  
+- **Separation of Concerns:** Keep the components decoupled. For example, if there's a vision processing module and a user interface module, define clear interfaces between them rather than intertwining logic. This will make future modifications or replacements easier.  
+- **Scalability & Extensibility:** Lay groundwork for future expansion. New features should integrate without requiring major rewrites of existing code. Favor designs that accommodate new requirements (e.g., plugin-like modules, configuration-driven behavior) so the project can grow organically.  

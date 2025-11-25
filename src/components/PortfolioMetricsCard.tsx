@@ -1,6 +1,7 @@
 
 import { CardGradient } from "@/components/ui/card-gradient";
-import { calculatePortfolioMetrics, formatPercent, mockStocks } from "@/data/mockData";
+import { useQuery } from "@tanstack/react-query";
+import { apiService } from "@/services/api";
 import { AlertTriangle, BarChart, TrendingUp, Activity, ShieldAlert, Info, CircleAlert } from "lucide-react";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -14,6 +15,13 @@ export default function PortfolioMetricsCard({
   selectedAssets,
   weights,
 }: PortfolioMetricsCardProps) {
+  // Fetch portfolio metrics from API
+  const { data: portfolioData, isLoading, error } = useQuery({
+    queryKey: ['portfolio-metrics', selectedAssets, weights],
+    queryFn: () => apiService.getPortfolioMetrics(selectedAssets, weights),
+    enabled: selectedAssets.length > 0 && Object.keys(weights).length > 0,
+  });
+
   if (selectedAssets.length === 0) {
     return (
       <CardGradient className="h-[240px] flex flex-col items-center justify-center">
@@ -22,19 +30,38 @@ export default function PortfolioMetricsCard({
       </CardGradient>
     );
   }
+
+  if (isLoading) {
+    return (
+      <CardGradient className="h-[240px] flex items-center justify-center">
+        <p className="text-muted-foreground">Loading portfolio metrics...</p>
+      </CardGradient>
+    );
+  }
+
+  if (error) {
+    return (
+      <CardGradient className="h-[240px] flex flex-col items-center justify-center">
+        <AlertTriangle className="h-8 w-8 text-dashboard-negative mb-2" />
+        <p className="text-dashboard-negative text-center">
+          Error loading portfolio metrics: {error.message || 'Unknown error'}
+        </p>
+      </CardGradient>
+    );
+  }
+
+  if (!portfolioData?.metrics) {
+    return (
+      <CardGradient className="h-[240px] flex items-center justify-center">
+        <p className="text-muted-foreground">No portfolio data available</p>
+      </CardGradient>
+    );
+  }
+
+  const metrics = portfolioData.metrics;
   
-  // Calculate portfolio metrics including weighted VaR
-  const metrics = calculatePortfolioMetrics(selectedAssets, weights);
-  
-  // Calculate weighted VaR breach statistics (number of breaches)
-  const varBreaches = {
-    parametricVaR95: Math.floor(Math.random() * 10), // Simulated data
-    monteCarloVaR95: Math.floor(Math.random() * 8),
-    deepVaR95: Math.floor(Math.random() * 6),
-    parametricVaR99: Math.floor(Math.random() * 5),
-    monteCarloVaR99: Math.floor(Math.random() * 3),
-    deepVaR99: Math.floor(Math.random() * 2)
-  };
+  // Get real backtesting statistics from API
+  const backtesting = portfolioData.backtesting || {};
   
   // Determine classes based on value
   const getColorClass = (value: number) => {
@@ -121,7 +148,7 @@ export default function PortfolioMetricsCard({
                     </HoverCardContent>
                   </HoverCard>
                 </div>
-                <p className={`text-lg font-semibold ${metrics.sharpeRatio >= 1 ? 'text-dashboard-positive' : metrics.sharpeRatio >= 0 ? 'text-yellow-500' : 'text-dashboard-negative'}`}>
+                <p className="text-lg font-semibold text-dashboard-positive">
                   {metrics.sharpeRatio.toFixed(2)}
                 </p>
               </div>
@@ -159,7 +186,7 @@ export default function PortfolioMetricsCard({
                     </HoverCardContent>
                   </HoverCard>
                 </div>
-                <p className="text-lg font-semibold">
+                <p className="text-lg font-semibold text-dashboard-negative">
                   {metrics.volatility.toFixed(2)}%
                 </p>
               </div>
@@ -183,8 +210,8 @@ export default function PortfolioMetricsCard({
                     </HoverCardContent>
                   </HoverCard>
                 </div>
-                <p className={`text-lg font-semibold ${getColorClass(metrics.returns)}`}>
-                  {formatPercent(metrics.returns)}
+                <p className="text-lg font-semibold text-dashboard-positive">
+                  {metrics.returns.toFixed(2)}%
                 </p>
               </div>
             </div>
@@ -233,7 +260,7 @@ export default function PortfolioMetricsCard({
                           <p className="text-xs text-muted-foreground">Parametric</p>
                           <div className="flex items-center">
                             <CircleAlert className="h-3 w-3 text-dashboard-negative mr-1" />
-                            <span className="text-xs font-medium text-red-400">{varBreaches.parametricVaR95}</span>
+                            <span className="text-xs font-medium text-red-400">{backtesting.parametricVaR95?.breachCount || 0}</span>
                           </div>
                         </div>
                         <p className="text-sm font-semibold text-dashboard-negative">
@@ -241,20 +268,18 @@ export default function PortfolioMetricsCard({
                         </p>
                       </div>
                     </HoverCardTrigger>
-                    <HoverCardContent className="w-72">
-                      <h4 className="text-sm font-medium mb-1">Parametric VaR (95%)</h4>
-                      <p className="text-xs text-muted-foreground mb-2">Uses normal distribution assumptions to calculate potential losses.</p>
-                      <div className="flex justify-between items-center text-xs">
-                        <span>VaR Level:</span>
-                        <span className="font-medium text-dashboard-negative">-{metrics.parametricVaR95.toFixed(2)}%</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Breaches:</span>
-                        <span className="font-medium text-red-400">{varBreaches.parametricVaR95} of last 100 days</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Rating:</span>
-                        <span className="font-medium">{getVaRRating(varBreaches.parametricVaR95, '95')}</span>
+                    <HoverCardContent className="w-80">
+                      <h4 className="text-sm font-medium mb-2">Parametric VaR (95%)</h4>
+                      <p className="text-xs text-muted-foreground mb-3">Value at Risk using normal distribution assumption at 95% confidence level.</p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Breaches:</span>
+                          <span className="font-medium text-red-400">{backtesting.parametricVaR95?.breachCount || 0} of {backtesting.parametricVaR95?.totalDays || 0} days</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Rating:</span>
+                          <span className="font-medium">{getVaRRating(backtesting.parametricVaR95?.breachCount || 0, '95')}</span>
+                        </div>
                       </div>
                     </HoverCardContent>
                   </HoverCard>
@@ -266,7 +291,7 @@ export default function PortfolioMetricsCard({
                           <p className="text-xs text-muted-foreground">Monte Carlo</p>
                           <div className="flex items-center">
                             <CircleAlert className="h-3 w-3 text-dashboard-negative mr-1" />
-                            <span className="text-xs font-medium text-red-400">{varBreaches.monteCarloVaR95}</span>
+                            <span className="text-xs font-medium text-red-400">{backtesting.monteCarloVaR95?.breachCount || 0}</span>
                           </div>
                         </div>
                         <p className="text-sm font-semibold text-dashboard-negative">
@@ -274,20 +299,18 @@ export default function PortfolioMetricsCard({
                         </p>
                       </div>
                     </HoverCardTrigger>
-                    <HoverCardContent className="w-72">
-                      <h4 className="text-sm font-medium mb-1">Monte Carlo VaR (95%)</h4>
-                      <p className="text-xs text-muted-foreground mb-2">Uses simulations to model potential price paths and calculate losses.</p>
-                      <div className="flex justify-between items-center text-xs">
-                        <span>VaR Level:</span>
-                        <span className="font-medium text-dashboard-negative">-{metrics.monteCarloVaR95.toFixed(2)}%</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Breaches:</span>
-                        <span className="font-medium text-red-400">{varBreaches.monteCarloVaR95} of last 100 days</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Rating:</span>
-                        <span className="font-medium">{getVaRRating(varBreaches.monteCarloVaR95, '95')}</span>
+                    <HoverCardContent className="w-80">
+                      <h4 className="text-sm font-medium mb-2">Monte Carlo VaR (95%)</h4>
+                      <p className="text-xs text-muted-foreground mb-3">Value at Risk using Monte Carlo simulation at 95% confidence level.</p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Breaches:</span>
+                          <span className="font-medium text-red-400">{backtesting.monteCarloVaR95?.breachCount || 0} of {backtesting.monteCarloVaR95?.totalDays || 0} days</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Rating:</span>
+                          <span className="font-medium">{getVaRRating(backtesting.monteCarloVaR95?.breachCount || 0, '95')}</span>
+                        </div>
                       </div>
                     </HoverCardContent>
                   </HoverCard>
@@ -299,7 +322,7 @@ export default function PortfolioMetricsCard({
                           <p className="text-xs text-muted-foreground">DeepVaR</p>
                           <div className="flex items-center">
                             <CircleAlert className="h-3 w-3 text-dashboard-negative mr-1" />
-                            <span className="text-xs font-medium text-red-400">{varBreaches.deepVaR95}</span>
+                            <span className="text-xs font-medium text-red-400">{backtesting.deepVaR95?.breachCount || 0}</span>
                           </div>
                         </div>
                         <p className="text-sm font-semibold text-dashboard-negative">
@@ -307,20 +330,49 @@ export default function PortfolioMetricsCard({
                         </p>
                       </div>
                     </HoverCardTrigger>
-                    <HoverCardContent className="w-72">
-                      <h4 className="text-sm font-medium mb-1">Deep VaR (95%)</h4>
-                      <p className="text-xs text-muted-foreground mb-2">Uses neural networks to model complex market behaviors and calculate losses.</p>
-                      <div className="flex justify-between items-center text-xs">
-                        <span>VaR Level:</span>
-                        <span className="font-medium text-dashboard-negative">-{metrics.deepVaR95.toFixed(2)}%</span>
+                    <HoverCardContent className="w-80">
+                      <h4 className="text-sm font-medium mb-2">Deep VaR (95%)</h4>
+                      <p className="text-xs text-muted-foreground mb-3">Value at Risk using deep learning model at 95% confidence level.</p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Breaches:</span>
+                          <span className="font-medium text-red-400">{backtesting.deepVaR95?.breachCount || 0} of {backtesting.deepVaR95?.totalDays || 0} days</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Rating:</span>
+                          <span className="font-medium">{getVaRRating(backtesting.deepVaR95?.breachCount || 0, '95')}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Breaches:</span>
-                        <span className="font-medium text-red-400">{varBreaches.deepVaR95} of last 100 days</span>
+                    </HoverCardContent>
+                  </HoverCard>
+                  
+                  <HoverCard>
+                    <HoverCardTrigger className="w-full">
+                      <div className="p-2 rounded-md hover:bg-slate-700/30 transition-colors">
+                        <div className="flex justify-between items-center">
+                          <p className="text-xs text-muted-foreground">BLNNVaR</p>
+                          <div className="flex items-center">
+                            <CircleAlert className="h-3 w-3 text-dashboard-negative mr-1" />
+                            <span className="text-xs font-medium text-red-400">{backtesting.blnnVaR95?.breachCount || 0}</span>
+                          </div>
+                        </div>
+                        <p className="text-sm font-semibold text-dashboard-negative">
+                          -{metrics.blnnVaR95.toFixed(2)}%
+                        </p>
                       </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Rating:</span>
-                        <span className="font-medium">{getVaRRating(varBreaches.deepVaR95, '95')}</span>
+                    </HoverCardTrigger>
+                    <HoverCardContent className="w-80">
+                      <h4 className="text-sm font-medium mb-2">BLNNVaR (95%)</h4>
+                      <p className="text-xs text-muted-foreground mb-3">Value at Risk using Bayesian LSTM Neural Network at 95% confidence level.</p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Breaches:</span>
+                          <span className="font-medium text-red-400">{backtesting.blnnVaR95?.breachCount || 0} of {backtesting.blnnVaR95?.totalDays || 0} days</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Rating:</span>
+                          <span className="font-medium">{getVaRRating(backtesting.blnnVaR95?.breachCount || 0, '95')}</span>
+                        </div>
                       </div>
                     </HoverCardContent>
                   </HoverCard>
@@ -353,7 +405,7 @@ export default function PortfolioMetricsCard({
                           <p className="text-xs text-muted-foreground">Parametric</p>
                           <div className="flex items-center">
                             <CircleAlert className="h-3 w-3 text-dashboard-negative mr-1" />
-                            <span className="text-xs font-medium text-red-400">{varBreaches.parametricVaR99}</span>
+                            <span className="text-xs font-medium text-red-400">{backtesting.parametricVaR99?.breachCount || 0}</span>
                           </div>
                         </div>
                         <p className="text-sm font-semibold text-dashboard-negative">
@@ -361,20 +413,18 @@ export default function PortfolioMetricsCard({
                         </p>
                       </div>
                     </HoverCardTrigger>
-                    <HoverCardContent className="w-72">
-                      <h4 className="text-sm font-medium mb-1">Parametric VaR (99%)</h4>
-                      <p className="text-xs text-muted-foreground mb-2">Uses normal distribution assumptions with higher confidence level.</p>
-                      <div className="flex justify-between items-center text-xs">
-                        <span>VaR Level:</span>
-                        <span className="font-medium text-dashboard-negative">-{metrics.parametricVaR99.toFixed(2)}%</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Breaches:</span>
-                        <span className="font-medium text-red-400">{varBreaches.parametricVaR99} of last 100 days</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Rating:</span>
-                        <span className="font-medium">{getVaRRating(varBreaches.parametricVaR99, '99')}</span>
+                    <HoverCardContent className="w-80">
+                      <h4 className="text-sm font-medium mb-2">Parametric VaR (99%)</h4>
+                      <p className="text-xs text-muted-foreground mb-3">Value at Risk using normal distribution assumption at 99% confidence level.</p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Breaches:</span>
+                          <span className="font-medium text-red-400">{backtesting.parametricVaR99?.breachCount || 0} of {backtesting.parametricVaR99?.totalDays || 0} days</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Rating:</span>
+                          <span className="font-medium">{getVaRRating(backtesting.parametricVaR99?.breachCount || 0, '99')}</span>
+                        </div>
                       </div>
                     </HoverCardContent>
                   </HoverCard>
@@ -386,7 +436,7 @@ export default function PortfolioMetricsCard({
                           <p className="text-xs text-muted-foreground">Monte Carlo</p>
                           <div className="flex items-center">
                             <CircleAlert className="h-3 w-3 text-dashboard-negative mr-1" />
-                            <span className="text-xs font-medium text-red-400">{varBreaches.monteCarloVaR99}</span>
+                            <span className="text-xs font-medium text-red-400">{backtesting.monteCarloVaR99?.breachCount || 0}</span>
                           </div>
                         </div>
                         <p className="text-sm font-semibold text-dashboard-negative">
@@ -394,20 +444,18 @@ export default function PortfolioMetricsCard({
                         </p>
                       </div>
                     </HoverCardTrigger>
-                    <HoverCardContent className="w-72">
-                      <h4 className="text-sm font-medium mb-1">Monte Carlo VaR (99%)</h4>
-                      <p className="text-xs text-muted-foreground mb-2">Uses simulations with higher confidence level for tail risk assessment.</p>
-                      <div className="flex justify-between items-center text-xs">
-                        <span>VaR Level:</span>
-                        <span className="font-medium text-dashboard-negative">-{metrics.monteCarloVaR99.toFixed(2)}%</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Breaches:</span>
-                        <span className="font-medium text-red-400">{varBreaches.monteCarloVaR99} of last 100 days</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Rating:</span>
-                        <span className="font-medium">{getVaRRating(varBreaches.monteCarloVaR99, '99')}</span>
+                    <HoverCardContent className="w-80">
+                      <h4 className="text-sm font-medium mb-2">Monte Carlo VaR (99%)</h4>
+                      <p className="text-xs text-muted-foreground mb-3">Value at Risk using Monte Carlo simulation at 99% confidence level.</p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Breaches:</span>
+                          <span className="font-medium text-red-400">{backtesting.monteCarloVaR99?.breachCount || 0} of {backtesting.monteCarloVaR99?.totalDays || 0} days</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Rating:</span>
+                          <span className="font-medium">{getVaRRating(backtesting.monteCarloVaR99?.breachCount || 0, '99')}</span>
+                        </div>
                       </div>
                     </HoverCardContent>
                   </HoverCard>
@@ -419,7 +467,7 @@ export default function PortfolioMetricsCard({
                           <p className="text-xs text-muted-foreground">DeepVaR</p>
                           <div className="flex items-center">
                             <CircleAlert className="h-3 w-3 text-dashboard-negative mr-1" />
-                            <span className="text-xs font-medium text-red-400">{varBreaches.deepVaR99}</span>
+                            <span className="text-xs font-medium text-red-400">{backtesting.deepVaR99?.breachCount || 0}</span>
                           </div>
                         </div>
                         <p className="text-sm font-semibold text-dashboard-negative">
@@ -427,20 +475,49 @@ export default function PortfolioMetricsCard({
                         </p>
                       </div>
                     </HoverCardTrigger>
-                    <HoverCardContent className="w-72">
-                      <h4 className="text-sm font-medium mb-1">Deep VaR (99%)</h4>
-                      <p className="text-xs text-muted-foreground mb-2">Uses neural networks with higher confidence level for extreme tail risk modeling.</p>
-                      <div className="flex justify-between items-center text-xs">
-                        <span>VaR Level:</span>
-                        <span className="font-medium text-dashboard-negative">-{metrics.deepVaR99.toFixed(2)}%</span>
+                    <HoverCardContent className="w-80">
+                      <h4 className="text-sm font-medium mb-2">Deep VaR (99%)</h4>
+                      <p className="text-xs text-muted-foreground mb-3">Value at Risk using deep learning model at 99% confidence level.</p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Breaches:</span>
+                          <span className="font-medium text-red-400">{backtesting.deepVaR99?.breachCount || 0} of {backtesting.deepVaR99?.totalDays || 0} days</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Rating:</span>
+                          <span className="font-medium">{getVaRRating(backtesting.deepVaR99?.breachCount || 0, '99')}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Breaches:</span>
-                        <span className="font-medium text-red-400">{varBreaches.deepVaR99} of last 100 days</span>
+                    </HoverCardContent>
+                  </HoverCard>
+                  
+                  <HoverCard>
+                    <HoverCardTrigger className="w-full">
+                      <div className="p-2 rounded-md hover:bg-slate-700/30 transition-colors">
+                        <div className="flex justify-between items-center">
+                          <p className="text-xs text-muted-foreground">BLNNVaR</p>
+                          <div className="flex items-center">
+                            <CircleAlert className="h-3 w-3 text-dashboard-negative mr-1" />
+                            <span className="text-xs font-medium text-red-400">{backtesting.blnnVaR99?.breachCount || 0}</span>
+                          </div>
+                        </div>
+                        <p className="text-sm font-semibold text-dashboard-negative">
+                          -{metrics.blnnVaR99.toFixed(2)}%
+                        </p>
                       </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span>Rating:</span>
-                        <span className="font-medium">{getVaRRating(varBreaches.deepVaR99, '99')}</span>
+                    </HoverCardTrigger>
+                    <HoverCardContent className="w-80">
+                      <h4 className="text-sm font-medium mb-2">BLNNVaR (99%)</h4>
+                      <p className="text-xs text-muted-foreground mb-3">Value at Risk using Bayesian LSTM Neural Network at 99% confidence level.</p>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Breaches:</span>
+                          <span className="font-medium text-red-400">{backtesting.blnnVaR99?.breachCount || 0} of {backtesting.blnnVaR99?.totalDays || 0} days</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs">
+                          <span>Rating:</span>
+                          <span className="font-medium">{getVaRRating(backtesting.blnnVaR99?.breachCount || 0, '99')}</span>
+                        </div>
                       </div>
                     </HoverCardContent>
                   </HoverCard>
