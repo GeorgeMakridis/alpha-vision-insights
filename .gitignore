@@ -28,3 +28,8 @@ backend/data/
 *.csv
 news_sentiment_*.json
 sp100_*.csv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
