@@ -12,6 +12,7 @@ import PortfolioAllocationChart from "@/components/PortfolioAllocationChart";
 import PortfolioChart from "@/components/PortfolioChart";
 import PortfolioVaRChart from "@/components/PortfolioVaRChart";
 import AssetNewsHeadlines from "@/components/AssetNewsHeadlines";
+import RiskChatbot from "@/components/RiskChatbot";
 import { apiService } from "@/services/api";
 import { BarChart, TrendingUp, Info } from "lucide-react";
 
@@ -308,6 +309,12 @@ const Index = () => {
           </div>
         </div>
       </footer>
+
+      <RiskChatbot
+        selectedAsset={selectedAsset}
+        portfolioAssets={selectedPortfolioAssets}
+        portfolioWeights={portfolioWeights}
+      />
     </div>
   );
 };

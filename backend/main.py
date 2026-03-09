@@ -79,12 +79,21 @@ class PortfolioVaRTimeSeriesRequest(BaseModel):
     days: int = None
     rolling_window: int = None
 
+class ChatRequest(BaseModel):
+    message: str
+    selected_asset: Optional[str] = None
+    portfolio_assets: Optional[List[str]] = None
+    portfolio_weights: Optional[Dict[str, float]] = None
+    conversation_history: Optional[List[Dict[str, str]]] = None
+
 # Global data storage
 price_data = None
 news_data = None
 stock_info = {}
 # Pre-calculated VaR time-series for all assets (key: ticker, value: dict with rolling_window as key)
 var_timeseries_cache = {}
+# Pre-computed DeepVaR results from DeepAR model: {ticker: {date_str: {deepVaR95, deepVaR99, deepBreach95, deepBreach99}}}
+deepvar_results_cache = {}
 
 # OpenAI configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -94,6 +103,74 @@ OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 BLNN_VAR_API_URL = os.getenv("BLNN_VAR_API_URL", "")
 DEEP_VAR_API_URL = os.getenv("DEEP_VAR_API_URL", "")
 VAR_API_TIMEOUT = float(os.getenv("VAR_API_TIMEOUT", "5.0"))  # Timeout in seconds
+
+
+def load_deepvar_results():
+    """
+    Load pre-computed DeepVaR results from CSV into memory.
+    These are produced by compute_deepvar.py which trains the DeepAR model.
+    """
+    global deepvar_results_cache
+    deepvar_results_cache = {}
+    
+    results_file = Path(__file__).parent / "data" / "deepvar_results" / "deepvar_dashboard.csv"
+    
+    if not results_file.exists():
+        print("ℹ️  No DeepVaR results found. Run 'python compute_deepvar.py' to generate them.")
+        print(f"   Expected file: {results_file}")
+        return False
+    
+    try:
+        df = pd.read_csv(results_file)
+        
+        for _, row in df.iterrows():
+            ticker = row['ticker']
+            date_str = str(row['next_date'])[:10]
+            
+            if ticker not in deepvar_results_cache:
+                deepvar_results_cache[ticker] = {}
+            
+            deepvar_results_cache[ticker][date_str] = {
+                'deepVaR95': float(row['deepVaR95']),
+                'deepVaR99': float(row['deepVaR99']),
+                'deepBreach95': int(row['deepBreach95']),
+                'deepBreach99': int(row['deepBreach99']),
+            }
+        
+        n_tickers = len(deepvar_results_cache)
+        n_dates = sum(len(dates) for dates in deepvar_results_cache.values())
+        date_range = sorted(set(
+            d for dates in deepvar_results_cache.values() for d in dates.keys()
+        ))
+        
+        print(f"✅ Loaded DeepVaR results: {n_tickers} tickers, {n_dates} data points")
+        if date_range:
+            print(f"   Date range: {date_range[0]} to {date_range[-1]}")
+        return True
+        
+    except Exception as e:
+        print(f"⚠️  Error loading DeepVaR results: {e}")
+        return False
+
+
+def get_deepvar_for_ticker_date(ticker: str, date_str: str) -> Dict[str, float]:
+    """
+    Look up pre-computed DeepVaR values for a given ticker and date.
+    Returns dict with deepVaR95, deepVaR99, deepBreach95, deepBreach99.
+    """
+    if ticker in deepvar_results_cache and date_str in deepvar_results_cache[ticker]:
+        return deepvar_results_cache[ticker][date_str]
+    return {'deepVaR95': 0.0, 'deepVaR99': 0.0, 'deepBreach95': 0, 'deepBreach99': 0}
+
+
+def get_latest_deepvar_for_ticker(ticker: str) -> Dict[str, float]:
+    """Get the most recent DeepVaR values for a ticker."""
+    if ticker not in deepvar_results_cache or not deepvar_results_cache[ticker]:
+        return {'deepVaR95': 0.0, 'deepVaR99': 0.0}
+    
+    latest_date = max(deepvar_results_cache[ticker].keys())
+    return deepvar_results_cache[ticker][latest_date]
+
 
 def generate_xai_insights(title: str, content: str, sentiment: float, lime_words: List[Dict[str, Any]]) -> str:
     """
@@ -359,24 +436,15 @@ async def calculate_risk_metrics(ticker: str, returns: pd.Series) -> Dict[str, f
     monte_carlo_var_95 = calculate_monte_carlo_var(returns, 0.95)
     monte_carlo_var_99 = calculate_monte_carlo_var(returns, 0.99)
     
-    # Fetch Deep VaR and BLNNVaR from external endpoints (run in parallel)
-    deep_var_95_task = fetch_deep_var(ticker, returns, 0.95)
-    deep_var_99_task = fetch_deep_var(ticker, returns, 0.99)
+    # DeepVaR: use pre-computed results from DeepAR model (run compute_deepvar.py to generate)
+    deepvar_latest = get_latest_deepvar_for_ticker(ticker)
+    deep_var_95 = deepvar_latest.get('deepVaR95', 0.0)
+    deep_var_99 = deepvar_latest.get('deepVaR99', 0.0)
+    
+    # BLNNVaR: fetch from external API (not implemented yet, stays 0)
     blnn_var_95_task = fetch_blnn_var(ticker, returns, 0.95)
     blnn_var_99_task = fetch_blnn_var(ticker, returns, 0.99)
-    
-    # Wait for all API calls to complete
-    deep_var_95, deep_var_99, blnn_var_95, blnn_var_99 = await asyncio.gather(
-        deep_var_95_task,
-        deep_var_99_task,
-        blnn_var_95_task,
-        blnn_var_99_task,
-        return_exceptions=True
-    )
-    
-    # Handle exceptions and None values (fallback to 0 if unavailable)
-    deep_var_95 = 0.0 if (deep_var_95 is None or isinstance(deep_var_95, Exception)) else deep_var_95
-    deep_var_99 = 0.0 if (deep_var_99 is None or isinstance(deep_var_99, Exception)) else deep_var_99
+    blnn_var_95, blnn_var_99 = await asyncio.gather(blnn_var_95_task, blnn_var_99_task, return_exceptions=True)
     blnn_var_95 = 0.0 if (blnn_var_95 is None or isinstance(blnn_var_95, Exception)) else blnn_var_95
     blnn_var_99 = 0.0 if (blnn_var_99 is None or isinstance(blnn_var_99, Exception)) else blnn_var_99
     
@@ -606,24 +674,39 @@ def calculate_var_timeseries_for_asset(ticker: str, stock_data: pd.Series, rolli
         parametric_breach_99 = 1 if actual_return < parametric_var_99_threshold else 0
         monte_carlo_breach_99 = 1 if actual_return < monte_carlo_var_99_threshold else 0
         
+        # DeepVaR: lookup pre-computed values from DeepAR model cache
+        deepvar_row = get_deepvar_for_ticker_date(ticker, date_str)
+        deep_var_95 = deepvar_row['deepVaR95']
+        deep_var_99 = deepvar_row['deepVaR99']
+        deep_breach_95 = deepvar_row['deepBreach95']
+        deep_breach_99 = deepvar_row['deepBreach99']
+        deep_var_95_price = prev_price_value * (1 + deep_var_95 / 100)
+        deep_var_99_price = prev_price_value * (1 + deep_var_99 / 100)
+        
         timeseries_data.append({
             "date": date_str,
             "price": float(price_value),
             "actualReturn": float(actual_return * 100),  # Store as percentage
             "parametricVaR95": float(parametric_var_95),
             "monteCarloVaR95": float(monte_carlo_var_95),
+            "deepVaR95": float(deep_var_95),
             "parametricVaR99": float(parametric_var_99),
             "monteCarloVaR99": float(monte_carlo_var_99),
+            "deepVaR99": float(deep_var_99),
             # Calculate VaR price levels based on previous day's price
             "parametricVaR95Price": float(parametric_var_95_price),
             "monteCarloVaR95Price": float(monte_carlo_var_95_price),
+            "deepVaR95Price": float(deep_var_95_price),
             "parametricVaR99Price": float(parametric_var_99_price),
             "monteCarloVaR99Price": float(monte_carlo_var_99_price),
+            "deepVaR99Price": float(deep_var_99_price),
             # Breach flags (1 = breach occurred, 0 = no breach)
             "parametricBreach95": int(parametric_breach_95),
             "monteCarloBreach95": int(monte_carlo_breach_95),
+            "deepBreach95": int(deep_breach_95),
             "parametricBreach99": int(parametric_breach_99),
             "monteCarloBreach99": int(monte_carlo_breach_99),
+            "deepBreach99": int(deep_breach_99),
         })
     
     return timeseries_data
@@ -941,12 +1024,24 @@ def load_data():
 @app.on_event("startup")
 async def startup_event():
     load_data()
+    load_deepvar_results()
     # Pre-calculate VaR time-series in background (loads from disk if available, otherwise calculates and saves)
     # Run in background task so health endpoint can respond immediately
     import asyncio
     asyncio.create_task(precalculate_var_timeseries_async())
     # Note: Pre-calculation happens on-demand or can be triggered manually
     # For now, we calculate on-demand which is fast enough for individual requests
+
+@app.get("/")
+async def root():
+    """Root endpoint - API info"""
+    return {
+        "name": "AlphaVision API",
+        "docs": "/docs",
+        "redoc": "/redoc",
+        "health": "/health",
+        "message": "Use the dashboard at the frontend URL (port 8081). API docs at /docs"
+    }
 
 @app.get("/health")
 async def health_check():
@@ -1143,12 +1238,23 @@ async def get_stock_metrics(
         if days and days > 0:
             timeseries_data = timeseries_data[-days:]
         
+        # Enrich with DeepVaR breach data from cache (for disk-loaded data that may lack it)
+        for day_data in timeseries_data:
+            date_str = str(day_data.get("date", ""))[:10]
+            deepvar_row = get_deepvar_for_ticker_date(ticker, date_str)
+            if deepvar_row["deepVaR95"]:
+                day_data["deepBreach95"] = deepvar_row["deepBreach95"]
+            if deepvar_row["deepVaR99"]:
+                day_data["deepBreach99"] = deepvar_row["deepBreach99"]
+        
         # Calculate breach statistics from pre-calculated data
         var_methods = [
             ('parametricVaR95', 'parametricBreach95'),
             ('monteCarloVaR95', 'monteCarloBreach95'),
+            ('deepVaR95', 'deepBreach95'),
             ('parametricVaR99', 'parametricBreach99'),
             ('monteCarloVaR99', 'monteCarloBreach99'),
+            ('deepVaR99', 'deepBreach99'),
         ]
         
         total_days = len(timeseries_data)
@@ -1161,7 +1267,7 @@ async def get_stock_metrics(
                 expected_percentage = 5.0 if '95' in var_key else 1.0
                 
                 backtesting_stats[var_key] = {
-                    'actualBreaches': breaches,
+                    'breachCount': breaches,
                     'expectedBreaches': round(expected_breaches, 1),
                     'expectedPercentage': expected_percentage,
                     'totalDays': total_days
@@ -1240,22 +1346,26 @@ async def get_var_timeseries(
     if days and days > 0:
         timeseries_data = timeseries_data[-days:]
     
-    # Add Deep VaR and BLNNVaR (set to 0 for now, can be fetched from APIs if needed)
-    for day_data in timeseries_data:
-        # Deep VaR and BLNNVaR are typically from external APIs, set to 0 for now
-        # They can be calculated separately if needed
-        day_data["deepVaR95"] = 0.0
+    # Enrich with DeepVaR from pre-computed cache (run compute_deepvar.py to generate)
+    # For cache-loaded data, DeepVaR may be missing; for freshly calculated data it's already in day_data
+    for i, day_data in enumerate(timeseries_data):
+        date_str = str(day_data.get("date", ""))[:10]
+        deepvar_row = get_deepvar_for_ticker_date(ticker, date_str)
+        # Use cache if available, else keep existing (from calculate_var_timeseries_for_asset) or 0
+        day_data["deepVaR95"] = deepvar_row["deepVaR95"] or day_data.get("deepVaR95", 0.0)
+        day_data["deepVaR99"] = deepvar_row["deepVaR99"] or day_data.get("deepVaR99", 0.0)
+        day_data["deepBreach95"] = deepvar_row["deepBreach95"] if deepvar_row["deepVaR95"] else day_data.get("deepBreach95", 0)
+        day_data["deepBreach99"] = deepvar_row["deepBreach99"] if deepvar_row["deepVaR99"] else day_data.get("deepBreach99", 0)
+        price = day_data.get("price", 0)
+        prev_price = timeseries_data[i - 1]["price"] if i > 0 else price
+        day_data["deepVaR95Price"] = prev_price * (1 + day_data["deepVaR95"] / 100) if day_data["deepVaR95"] else price
+        day_data["deepVaR99Price"] = prev_price * (1 + day_data["deepVaR99"] / 100) if day_data["deepVaR99"] else price
+        # BLNNVaR: not implemented yet, stays 0
         day_data["blnnVaR95"] = 0.0
-        day_data["deepVaR99"] = 0.0
         day_data["blnnVaR99"] = 0.0
-        day_data["deepVaR95Price"] = day_data["price"]
-        day_data["blnnVaR95Price"] = day_data["price"]
-        day_data["deepVaR99Price"] = day_data["price"]
-        day_data["blnnVaR99Price"] = day_data["price"]
-        # Breach flags for Deep VaR and BLNNVaR (set to 0 since they're not calculated)
-        day_data["deepBreach95"] = 0
+        day_data["blnnVaR95Price"] = price
+        day_data["blnnVaR99Price"] = price
         day_data["blnnBreach95"] = 0
-        day_data["deepBreach99"] = 0
         day_data["blnnBreach99"] = 0
     
     return {
@@ -1515,41 +1625,25 @@ async def get_portfolio_var_timeseries(request: PortfolioVaRTimeSeriesRequest):
         parametric_breach_99 = 1 if actual_return < parametric_var_99_threshold else 0
         monte_carlo_breach_99 = 1 if actual_return < monte_carlo_var_99_threshold else 0
         
-        # For Deep VaR and BLNNVaR, we need to calculate them for the portfolio
-        # For now, set to 0 (can be fetched from APIs if needed)
-        portfolio_ticker = f"PORTFOLIO_{'_'.join(sorted(selected_assets))}"
+        # DeepVaR: aggregate from constituent assets (weighted sum of per-asset DeepVaR)
         deep_var_95 = 0.0
         deep_var_99 = 0.0
+        for tkr, w in weights.items():
+            dv = get_deepvar_for_ticker_date(tkr, date_str)
+            deep_var_95 += w * dv["deepVaR95"]
+            deep_var_99 += w * dv["deepVaR99"]
+        deep_breach_95 = 1 if (deep_var_95 and actual_return < (deep_var_95 / 100)) else 0
+        deep_breach_99 = 1 if (deep_var_99 and actual_return < (deep_var_99 / 100)) else 0
+        # BLNNVaR: not implemented yet
         blnn_var_95 = 0.0
         blnn_var_99 = 0.0
         
-        # Try to fetch Deep VaR and BLNNVaR from APIs (if configured)
-        if len(historical_returns) >= 30:
-            deep_var_95_task = fetch_deep_var(portfolio_ticker, historical_returns, 0.95)
-            deep_var_99_task = fetch_deep_var(portfolio_ticker, historical_returns, 0.99)
-            blnn_var_95_task = fetch_blnn_var(portfolio_ticker, historical_returns, 0.95)
-            blnn_var_99_task = fetch_blnn_var(portfolio_ticker, historical_returns, 0.99)
-            
-            deep_var_95, deep_var_99, blnn_var_95, blnn_var_99 = await asyncio.gather(
-                deep_var_95_task, deep_var_99_task, blnn_var_95_task, blnn_var_99_task,
-                return_exceptions=True
-            )
-            
-            # Handle exceptions and None values
-            deep_var_95 = deep_var_95 if (not isinstance(deep_var_95, Exception) and deep_var_95 is not None) else 0.0
-            deep_var_99 = deep_var_99 if (not isinstance(deep_var_99, Exception) and deep_var_99 is not None) else 0.0
-            blnn_var_95 = blnn_var_95 if (not isinstance(blnn_var_95, Exception) and blnn_var_95 is not None) else 0.0
-            blnn_var_99 = blnn_var_99 if (not isinstance(blnn_var_99, Exception) and blnn_var_99 is not None) else 0.0
-        
-        deep_var_95_price = prev_price_value * (1 + deep_var_95 / 100) if (deep_var_95 is not None and deep_var_95 != 0) else price_value
-        deep_var_99_price = prev_price_value * (1 + deep_var_99 / 100) if (deep_var_99 is not None and deep_var_99 != 0) else price_value
-        blnn_var_95_price = prev_price_value * (1 + blnn_var_95 / 100) if (blnn_var_95 is not None and blnn_var_95 != 0) else price_value
-        blnn_var_99_price = prev_price_value * (1 + blnn_var_99 / 100) if (blnn_var_99 is not None and blnn_var_99 != 0) else price_value
-        
-        deep_breach_95 = 1 if (deep_var_95 is not None and deep_var_95 != 0 and actual_return < (deep_var_95 / 100)) else 0
-        deep_breach_99 = 1 if (deep_var_99 is not None and deep_var_99 != 0 and actual_return < (deep_var_99 / 100)) else 0
-        blnn_breach_95 = 1 if (blnn_var_95 is not None and blnn_var_95 != 0 and actual_return < (blnn_var_95 / 100)) else 0
-        blnn_breach_99 = 1 if (blnn_var_99 is not None and blnn_var_99 != 0 and actual_return < (blnn_var_99 / 100)) else 0
+        deep_var_95_price = prev_price_value * (1 + deep_var_95 / 100) if deep_var_95 else price_value
+        deep_var_99_price = prev_price_value * (1 + deep_var_99 / 100) if deep_var_99 else price_value
+        blnn_var_95_price = price_value
+        blnn_var_99_price = price_value
+        blnn_breach_95 = 0
+        blnn_breach_99 = 0
         
         timeseries_data.append({
             "date": date_str,
@@ -1706,6 +1800,225 @@ async def get_lime_analysis(article_id: str):
         "overallSentiment": article["sentiment"],
         "aiInsights": ai_insights
     }
+
+def gather_rag_context(selected_asset: str = None, portfolio_assets: List[str] = None, portfolio_weights: Dict[str, float] = None) -> str:
+    """
+    Gather relevant dashboard data as RAG context for the chatbot.
+    Pulls real data from the loaded datasets to ground the LLM responses.
+    """
+    context_parts = []
+    
+    # 1. Market overview
+    if price_data is not None:
+        latest_prices = price_data.iloc[-1].dropna()
+        market_date = price_data.index[-1].strftime("%Y-%m-%d")
+        context_parts.append(f"=== MARKET OVERVIEW (as of {market_date}) ===")
+        context_parts.append(f"Total S&P 100 stocks tracked: {len(latest_prices)}")
+        context_parts.append(f"Average stock price: ${latest_prices.mean():.2f}")
+        
+        # Sector breakdown
+        sectors = {}
+        for ticker in latest_prices.index:
+            if ticker in stock_info:
+                sector = stock_info[ticker].get("sector", "Other")
+                if sector not in sectors:
+                    sectors[sector] = []
+                sectors[sector].append(ticker)
+        sector_summary = ", ".join([f"{s}: {len(t)} stocks" for s, t in sorted(sectors.items())])
+        context_parts.append(f"Sectors: {sector_summary}")
+    
+    # 2. Selected asset details
+    if selected_asset and price_data is not None and selected_asset in price_data.columns:
+        context_parts.append(f"\n=== SELECTED ASSET: {selected_asset} ===")
+        info = stock_info.get(selected_asset, {})
+        context_parts.append(f"Company: {info.get('name', selected_asset)}")
+        context_parts.append(f"Sector: {info.get('sector', 'Unknown')}")
+        
+        stock_prices = price_data[selected_asset].dropna()
+        if not stock_prices.empty:
+            latest = stock_prices.iloc[-1]
+            context_parts.append(f"Latest price: ${latest:.2f}")
+            
+            # Calculate basic metrics
+            returns = stock_prices.pct_change().dropna()
+            if len(returns) > 1:
+                vol = returns.std() * np.sqrt(252) * 100
+                avg_ret = returns.mean() * 252 * 100
+                max_dd = ((stock_prices / stock_prices.cummax()) - 1).min() * 100
+                sharpe = (returns.mean() / returns.std()) * np.sqrt(252) if returns.std() > 0 else 0
+                
+                context_parts.append(f"Annualized volatility: {vol:.2f}%")
+                context_parts.append(f"Annualized return: {avg_ret:.2f}%")
+                context_parts.append(f"Sharpe ratio: {sharpe:.3f}")
+                context_parts.append(f"Maximum drawdown: {max_dd:.2f}%")
+                
+                # Parametric VaR
+                var95 = float(np.percentile(returns, 5)) * 100
+                var99 = float(np.percentile(returns, 1)) * 100
+                context_parts.append(f"Historical VaR 95%: {var95:.3f}% (daily)")
+                context_parts.append(f"Historical VaR 99%: {var99:.3f}% (daily)")
+            
+            # Recent price trend (last 5 days)
+            recent = stock_prices.tail(5)
+            trend = []
+            for date, price in recent.items():
+                trend.append(f"{date.strftime('%Y-%m-%d')}: ${price:.2f}")
+            context_parts.append(f"Recent prices: {'; '.join(trend)}")
+        
+        # Recent news for this asset
+        if news_data:
+            asset_news = []
+            for date_str, stocks_news in sorted(news_data.items(), reverse=True):
+                for stock_ticker, articles in stocks_news.items():
+                    clean_ticker = stock_ticker.split('.')[0]
+                    if clean_ticker == selected_asset:
+                        for article in articles[:2]:  # Max 2 per date
+                            asset_news.append({
+                                "date": date_str,
+                                "title": article.get("title", ""),
+                                "sentiment": article.get("sentiment", 0)
+                            })
+                if len(asset_news) >= 5:
+                    break
+            
+            if asset_news:
+                context_parts.append(f"\nRecent news for {selected_asset}:")
+                for n in asset_news[:5]:
+                    sent_label = "positive" if n["sentiment"] > 0.1 else ("negative" if n["sentiment"] < -0.1 else "neutral")
+                    context_parts.append(f"  - [{n['date']}] {n['title']} (sentiment: {sent_label}, {n['sentiment']:.3f})")
+    
+    # 3. Portfolio context
+    if portfolio_assets and portfolio_weights and price_data is not None:
+        context_parts.append(f"\n=== CURRENT PORTFOLIO ===")
+        context_parts.append(f"Assets: {', '.join(portfolio_assets)}")
+        for ticker in portfolio_assets:
+            weight = portfolio_weights.get(ticker, 0)
+            info = stock_info.get(ticker, {})
+            price = price_data[ticker].dropna().iloc[-1] if ticker in price_data.columns else 0
+            context_parts.append(f"  - {ticker} ({info.get('name', ticker)}): weight={weight*100:.1f}%, price=${price:.2f}, sector={info.get('sector', 'Unknown')}")
+        
+        # Portfolio-level metrics
+        valid_tickers = [t for t in portfolio_assets if t in price_data.columns]
+        if valid_tickers:
+            portfolio_returns = pd.DataFrame()
+            for ticker in valid_tickers:
+                w = portfolio_weights.get(ticker, 0)
+                portfolio_returns[ticker] = price_data[ticker].pct_change() * w
+            combined = portfolio_returns.sum(axis=1).dropna()
+            if len(combined) > 1:
+                port_vol = combined.std() * np.sqrt(252) * 100
+                port_ret = combined.mean() * 252 * 100
+                port_sharpe = (combined.mean() / combined.std()) * np.sqrt(252) if combined.std() > 0 else 0
+                port_var95 = float(np.percentile(combined, 5)) * 100
+                context_parts.append(f"Portfolio annualized volatility: {port_vol:.2f}%")
+                context_parts.append(f"Portfolio annualized return: {port_ret:.2f}%")
+                context_parts.append(f"Portfolio Sharpe ratio: {port_sharpe:.3f}")
+                context_parts.append(f"Portfolio Historical VaR 95%: {port_var95:.3f}% (daily)")
+    
+    # 4. Available stocks list
+    if stock_info:
+        tickers_by_sector = {}
+        for ticker, info in stock_info.items():
+            sector = info.get("sector", "Other")
+            if sector not in tickers_by_sector:
+                tickers_by_sector[sector] = []
+            tickers_by_sector[sector].append(ticker)
+        context_parts.append(f"\n=== AVAILABLE STOCKS BY SECTOR ===")
+        for sector in sorted(tickers_by_sector.keys()):
+            context_parts.append(f"{sector}: {', '.join(sorted(tickers_by_sector[sector]))}")
+    
+    return "\n".join(context_parts)
+
+
+@app.post("/api/chat")
+async def chat_endpoint(request: ChatRequest):
+    """
+    RAG-powered chatbot for financial risk questions.
+    Gathers real dashboard data as context and uses OpenAI to answer.
+    """
+    if not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=503, 
+            detail="OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
+        )
+    
+    # Gather RAG context from dashboard data
+    rag_context = gather_rag_context(
+        selected_asset=request.selected_asset,
+        portfolio_assets=request.portfolio_assets,
+        portfolio_weights=request.portfolio_weights
+    )
+    
+    system_prompt = f"""You are AlphaVision Risk Analyst, an expert AI assistant specializing in financial risk analysis for the S&P 100 universe. You have access to real dashboard data shown below.
+
+Your expertise covers:
+- Value at Risk (VaR): Parametric, Monte Carlo, Historical, Deep Learning-based, and BLNN approaches
+- Portfolio risk metrics: volatility, Sharpe ratio, maximum drawdown, correlation analysis
+- News sentiment analysis and its impact on financial risk
+- Regulatory frameworks: DORA, NIS2, EU AI Act compliance in financial risk management
+- Risk backtesting methodologies and breach analysis
+
+CURRENT DASHBOARD DATA:
+{rag_context}
+
+GUIDELINES:
+- Ground your answers in the actual data provided above whenever possible
+- When discussing specific stocks or metrics, reference the real numbers from the dashboard
+- If asked about data not available in the context, clearly state what you can and cannot see
+- Provide actionable risk insights and explain concepts clearly
+- Use financial terminology accurately but explain it when needed
+- Format responses concisely—use brief paragraphs, not long bullet lists
+- When relevant, suggest what the user could explore further on the dashboard
+"""
+
+    # Build conversation messages
+    messages = [{"role": "system", "content": system_prompt}]
+    
+    # Add conversation history if provided
+    if request.conversation_history:
+        for msg in request.conversation_history[-10:]:  # Last 10 messages for context window management
+            if msg.get("role") in ["user", "assistant"]:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+    
+    # Add current user message
+    messages.append({"role": "user", "content": request.message})
+    
+    try:
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": "gpt-4o-mini",
+            "messages": messages,
+            "max_tokens": 1000,
+            "temperature": 0.4
+        }
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(OPENAI_API_URL, headers=headers, json=data)
+            response.raise_for_status()
+        
+        result = response.json()
+        assistant_message = result['choices'][0]['message']['content'].strip()
+        
+        return {
+            "response": assistant_message,
+            "context_used": {
+                "selected_asset": request.selected_asset,
+                "portfolio_assets": request.portfolio_assets,
+                "data_date": price_data.index[-1].strftime("%Y-%m-%d") if price_data is not None else None
+            }
+        }
+        
+    except httpx.HTTPStatusError as e:
+        print(f"OpenAI API HTTP error: {e.response.status_code} - {e.response.text}")
+        raise HTTPException(status_code=502, detail=f"OpenAI API error: {e.response.status_code}")
+    except Exception as e:
+        print(f"Chat endpoint error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate response: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn

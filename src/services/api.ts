@@ -1,5 +1,5 @@
 // API service layer for AlphaVision backend
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
 
 export interface Stock {
   ticker: string;
@@ -258,6 +258,26 @@ class ApiService {
   // Get LIME analysis for a news article
   async getLimeAnalysis(articleId: string): Promise<LimeAnalysis> {
     return this.request(`/api/news/${articleId}/lime-analysis`);
+  }
+
+  // Chat with the Risk Analyst AI
+  async chat(
+    message: string,
+    selectedAsset?: string,
+    portfolioAssets?: string[],
+    portfolioWeights?: Record<string, number>,
+    conversationHistory?: Array<{ role: string; content: string }>
+  ): Promise<{ response: string; context_used: any }> {
+    return this.request('/api/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        selected_asset: selectedAsset,
+        portfolio_assets: portfolioAssets,
+        portfolio_weights: portfolioWeights,
+        conversation_history: conversationHistory
+      })
+    });
   }
 }
 

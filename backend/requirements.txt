@@ -8,4 +8,13 @@ python-dotenv==1.0.0
 httpx==0.25.2
 python-dateutil==2.8.2 
 scipy==1.11.4
-requests==2.31.0 
+requests==2.31.0
+
+# DeepVaR (DeepAR model for VaR estimation)
+torch>=2.0.0
+gluonts>=0.13.2
+lightning>=2.5.0
+pytorch-lightning>=2.5.0
+matplotlib>=3.7.1
+seaborn>=0.13.2
+tqdm>=4.65.0

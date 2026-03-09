@@ -37,6 +37,10 @@ docker-compose up --build -d
 docker-compose -f docker-compose.dev.yml up --build -d
 ```
 
+### DeepVaR (automatic on first run)
+
+The backend entrypoint trains the DeepVaR model **automatically** on first run if `data/deepvar_results/deepvar_dashboard.csv` does not exist. Training takes ~10–30 min on CPU. Results persist in the volume; subsequent restarts skip training and load from disk.
+
 ### Option 3: Development Setup
 
 ```bash
@@ -83,8 +87,8 @@ npm run dev
 ## 🐳 Docker Services
 
 ### Production Stack
-- **alphavision-frontend**: React dashboard (port 8080)
-- **alphavision-backend**: FastAPI API (port 8000)
+- **alphavision-frontend**: React dashboard (port 8081)
+- **alphavision-backend**: FastAPI API (port 8001); trains DeepVaR on first run via entrypoint
 
 ### Development Stack
 - Hot reloading for both frontend and backend
@@ -103,7 +107,7 @@ npm run dev
 ./deploy.sh health        # Check service health
 
 # Docker Compose
-docker-compose up --build -d                    # Production
+docker-compose up --build -d                    # Production (first run trains DeepVaR ~10-30 min)
 docker-compose -f docker-compose.dev.yml up --build -d  # Development
 docker-compose down                              # Stop services
 docker-compose logs -f                          # View logs
