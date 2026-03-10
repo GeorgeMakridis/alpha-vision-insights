@@ -4,6 +4,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    env_file:
+      - .env
     ports:
       - "8001:8000"
     volumes:
@@ -16,6 +18,9 @@ services:
       - VAR_API_TIMEOUT=${VAR_API_TIMEOUT:-5.0}
       - VAR_ROLLING_WINDOW_DAYS=${VAR_ROLLING_WINDOW_DAYS:-252}
       - DEEPVAR_EPOCHS=${DEEPVAR_EPOCHS:-10}
+      - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
+      - DATA_AUTO_UPDATE=${DATA_AUTO_UPDATE:-false}
+      - DATA_UPDATE_HOUR=${DATA_UPDATE_HOUR:-6}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

@@ -8,7 +8,32 @@ echo "================================================"
 echo "  AlphaVision Backend - Starting"
 echo "================================================"
 
-# ── Check for DeepVaR pre-computed results ───────────────────────
+# ── 1. Run daily data update if Finnhub key is available ─────────
+if [ -n "$FINNHUB_API_KEY" ]; then
+    PRICE_FILE="/app/data/sp100_daily_prices.csv"
+    if [ -f "$PRICE_FILE" ]; then
+        # Check staleness: update if older than 1 day (Linux stat)
+        LAST_MOD=$(stat -c %Y "$PRICE_FILE" 2>/dev/null || echo 0)
+        NOW=$(date +%s)
+        AGE=$(( (NOW - LAST_MOD) / 86400 ))
+        if [ "$AGE" -ge 1 ]; then
+            echo ""
+            echo "📊 Price data is ${AGE} day(s) old. Updating via Finnhub..."
+            python /app/data_updater.py --days 10 || echo "⚠️  Data update failed, continuing with existing data"
+        else
+            echo "✅ Price data is fresh"
+        fi
+    else
+        echo ""
+        echo "📊 No price data found — bootstrapping via Finnhub..."
+        python /app/data_updater.py --days 30 || echo "⚠️  Bootstrap failed. Provide initial data in backend/data/"
+    fi
+else
+    echo "ℹ️  FINNHUB_API_KEY not set. Daily updates disabled."
+    echo "   Get a free key at https://finnhub.io"
+fi
+
+# ── 2. Check for DeepVaR pre-computed results ───────────────────────
 if [ ! -f "$DEEPVAR_RESULTS" ]; then
     echo ""
     echo "🧠 DeepVaR results not found at $DEEPVAR_RESULTS"
@@ -30,7 +55,7 @@ else
     echo "✅ DeepVaR results found: $DEEPVAR_RESULTS ($ROWS rows)"
 fi
 
-# ── Invalidate old VaR cache if it lacks DeepVaR columns ────────
+# ── 3. Invalidate old VaR cache if it lacks DeepVaR columns ────────
 VAR_CACHE_DIR="/app/data/var_cache"
 if [ -d "$VAR_CACHE_DIR" ]; then
     # Check a sample cache file for DeepVaR columns

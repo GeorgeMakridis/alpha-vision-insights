@@ -18,3 +18,7 @@ pytorch-lightning>=2.5.0
 matplotlib>=3.7.1
 seaborn>=0.13.2
 tqdm>=4.65.0
+
+# Daily data updater (Finnhub prices/news + FinBERT sentiment)
+finnhub-python>=2.4.0
+transformers>=4.30.0

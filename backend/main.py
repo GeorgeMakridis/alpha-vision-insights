@@ -104,6 +104,9 @@ BLNN_VAR_API_URL = os.getenv("BLNN_VAR_API_URL", "")
 DEEP_VAR_API_URL = os.getenv("DEEP_VAR_API_URL", "")
 VAR_API_TIMEOUT = float(os.getenv("VAR_API_TIMEOUT", "5.0"))  # Timeout in seconds
 
+# Finnhub configuration (free API key from https://finnhub.io)
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+
 
 def load_deepvar_results():
     """
@@ -2018,6 +2021,164 @@ GUIDELINES:
     except Exception as e:
         print(f"Chat endpoint error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate response: {str(e)}")
+
+
+# ──────────────────────────────────────────────────────────────────
+# Data Update Endpoints
+# ──────────────────────────────────────────────────────────────────
+
+_update_running = False
+
+@app.post("/api/data/update")
+async def trigger_data_update(
+    prices: bool = Query(True, description="Update price data"),
+    news: bool = Query(True, description="Update news data"),
+    days: int = Query(7, description="Days to backfill")
+):
+    """
+    Trigger a data update from Finnhub. Requires FINNHUB_API_KEY.
+    After update, reloads data into memory and invalidates VaR cache.
+    """
+    global _update_running
+
+    if not FINNHUB_API_KEY:
+        raise HTTPException(status_code=503, detail="FINNHUB_API_KEY not set. Get a free key at https://finnhub.io")
+
+    if _update_running:
+        raise HTTPException(status_code=409, detail="Update already in progress")
+
+    _update_running = True
+    try:
+        from data_updater import run_update as _run_update
+        import concurrent.futures
+
+        loop = asyncio.get_running_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            success = await loop.run_in_executor(
+                pool,
+                lambda: _run_update(FINNHUB_API_KEY, prices=prices, news=news, days=days)
+            )
+
+        if not success:
+            raise HTTPException(status_code=500, detail="Data update failed — check backend logs")
+
+        # Reload data into memory
+        load_data()
+
+        # Clear VaR cache so it rebuilds with new data
+        global var_timeseries_cache
+        var_timeseries_cache.clear()
+        asyncio.create_task(precalculate_var_timeseries_async())
+
+        return {
+            "status": "success",
+            "prices_updated": prices,
+            "news_updated": news,
+            "timestamp": datetime.now().isoformat()
+        }
+    except ImportError:
+        raise HTTPException(status_code=500, detail="data_updater.py not found")
+    finally:
+        _update_running = False
+
+
+@app.get("/api/data/status")
+async def data_status():
+    """Check data freshness: latest dates, row counts, staleness."""
+    status = {
+        "timestamp": datetime.now().isoformat(),
+        "prices": None,
+        "news": None,
+        "deepvar": None,
+        "finnhub_configured": bool(FINNHUB_API_KEY),
+        "update_running": _update_running
+    }
+
+    if price_data is not None:
+        status["prices"] = {
+            "latest_date": price_data.index[-1].strftime("%Y-%m-%d"),
+            "oldest_date": price_data.index[0].strftime("%Y-%m-%d"),
+            "total_days": len(price_data),
+            "total_tickers": len(price_data.columns),
+            "days_stale": (datetime.now() - price_data.index[-1]).days
+        }
+
+    if news_data is not None:
+        dates = sorted(news_data.keys())
+        total_articles = sum(
+            sum(len(arts) for arts in stocks.values())
+            for stocks in news_data.values()
+        )
+        status["news"] = {
+            "latest_date": dates[-1] if dates else None,
+            "total_dates": len(dates),
+            "total_articles": total_articles
+        }
+
+    if deepvar_results_cache:
+        n_tickers = len(deepvar_results_cache)
+        all_dates = sorted(set(d for dmap in deepvar_results_cache.values() for d in dmap))
+        status["deepvar"] = {
+            "tickers": n_tickers,
+            "latest_date": all_dates[-1] if all_dates else None,
+            "total_points": sum(len(d) for d in deepvar_results_cache.values())
+        }
+
+    return status
+
+
+# ── Optional daily scheduler ─────────────────────────────────────
+# Set DATA_AUTO_UPDATE=true and FINNHUB_API_KEY to enable
+
+_scheduler_task = None
+
+async def _daily_update_loop():
+    """Background task: runs data update daily at configured hour."""
+    update_hour = int(os.getenv("DATA_UPDATE_HOUR", "6"))
+
+    while True:
+        now = datetime.now()
+        next_run = now.replace(hour=update_hour, minute=0, second=0, microsecond=0)
+        if now >= next_run:
+            next_run += timedelta(days=1)
+
+        wait_secs = (next_run - now).total_seconds()
+        print(f"📅 Next auto-update: {next_run.strftime('%Y-%m-%d %H:%M')} ({wait_secs/3600:.1f}h)")
+        await asyncio.sleep(wait_secs)
+
+        print(f"🔄 Starting scheduled data update...")
+        try:
+            from data_updater import run_update as _run_update
+            import concurrent.futures
+
+            loop = asyncio.get_running_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                await loop.run_in_executor(
+                    pool,
+                    lambda: _run_update(FINNHUB_API_KEY, prices=True, news=True, days=7)
+                )
+
+            load_data()
+            global var_timeseries_cache
+            var_timeseries_cache.clear()
+            asyncio.create_task(precalculate_var_timeseries_async())
+            print("✅ Scheduled update complete, data reloaded")
+        except Exception as e:
+            print(f"❌ Scheduled update failed: {e}")
+
+
+@app.on_event("startup")
+async def start_scheduler():
+    """Start the daily auto-update scheduler if enabled."""
+    global _scheduler_task
+    auto = os.getenv("DATA_AUTO_UPDATE", "").lower() in ("true", "1", "yes")
+    if auto and FINNHUB_API_KEY:
+        _scheduler_task = asyncio.create_task(_daily_update_loop())
+        print("📅 Daily auto-update ENABLED (Finnhub + FinBERT)")
+    elif auto and not FINNHUB_API_KEY:
+        print("⚠️  DATA_AUTO_UPDATE=true but FINNHUB_API_KEY not set — scheduler disabled")
+    else:
+        print("ℹ️  Auto-update disabled. Set DATA_AUTO_UPDATE=true and FINNHUB_API_KEY to enable.")
 
 
 if __name__ == "__main__":
