@@ -8,71 +8,63 @@ echo "================================================"
 echo "  AlphaVision Backend - Starting"
 echo "================================================"
 
-# ── 1. Run daily data update if Finnhub key is available ─────────
+# ── 1. Run data update if Finnhub key is set ─────────────────────
 if [ -n "$FINNHUB_API_KEY" ]; then
     PRICE_FILE="/app/data/sp100_daily_prices.csv"
     if [ -f "$PRICE_FILE" ]; then
-        # Check staleness: update if older than 1 day (Linux stat)
-        LAST_MOD=$(stat -c %Y "$PRICE_FILE" 2>/dev/null || echo 0)
-        NOW=$(date +%s)
-        AGE=$(( (NOW - LAST_MOD) / 86400 ))
-        if [ "$AGE" -ge 1 ]; then
-            echo ""
-            echo "📊 Price data is ${AGE} day(s) old. Updating via Finnhub..."
-            python /app/data_updater.py --days 10 || echo "⚠️  Data update failed, continuing with existing data"
-        else
-            echo "✅ Price data is fresh"
-        fi
+        echo ""
+        echo "📊 Running data update check..."
+        # The updater checks staleness and skips if already current.
+        # VaR cache is extended incrementally (no invalidation).
+        python /app/data_updater.py --days 10 || echo "⚠️  Data update failed, continuing with existing data"
     else
         echo ""
-        echo "📊 No price data found — bootstrapping via Finnhub..."
-        python /app/data_updater.py --days 30 || echo "⚠️  Bootstrap failed. Provide initial data in backend/data/"
+        echo "📊 No price data found — bootstrapping..."
+        python /app/data_updater.py --days 365 || echo "⚠️  Bootstrap failed"
     fi
 else
-    echo "ℹ️  FINNHUB_API_KEY not set. Daily updates disabled."
-    echo "   Get a free key at https://finnhub.io"
+    echo "ℹ️  FINNHUB_API_KEY not set. Updates disabled. Get a free key at https://finnhub.io"
 fi
 
-# ── 2. Check for DeepVaR pre-computed results ───────────────────────
+# ── 2. DeepVaR ───────────────────────────────────────────────────
+PRICE_FILE="/app/data/sp100_daily_prices.csv"
+NEED_DEEPVAR=false
 if [ ! -f "$DEEPVAR_RESULTS" ]; then
-    echo ""
-    echo "🧠 DeepVaR results not found at $DEEPVAR_RESULTS"
-    echo "   Training DeepAR model (this runs ONCE, results persist via volume)..."
-    echo "   Epochs: $DEEPVAR_EPOCHS"
-    echo ""
-    
-    python /app/compute_deepvar.py --epochs "$DEEPVAR_EPOCHS"
-    
-    if [ -f "$DEEPVAR_RESULTS" ]; then
-        echo ""
-        echo "✅ DeepVaR training complete. Results saved to volume."
+    if [ -f "$PRICE_FILE" ]; then
+        NEED_DEEPVAR=true
     else
-        echo ""
-        echo "⚠️  DeepVaR training did not produce results. Dashboard will run without DeepVaR."
+        echo "⚠️  Cannot train DeepVaR — no price data available"
     fi
 else
-    ROWS=$(wc -l < "$DEEPVAR_RESULTS")
-    echo "✅ DeepVaR results found: $DEEPVAR_RESULTS ($ROWS rows)"
+    # Check if prices have newer dates than DeepVaR
+    if [ -f "$PRICE_FILE" ]; then
+        PRICE_LATEST=$(tail -1 "$PRICE_FILE" | cut -d',' -f1)
+        DEEPVAR_LATEST=$(tail -1 "$DEEPVAR_RESULTS" | cut -d',' -f2)
+        if [ -n "$PRICE_LATEST" ] && [ -n "$DEEPVAR_LATEST" ] && [[ "$PRICE_LATEST" > "$DEEPVAR_LATEST" ]]; then
+            NEED_DEEPVAR=true
+        fi
+    fi
+    if [ "$NEED_DEEPVAR" = false ]; then
+        ROWS=$(wc -l < "$DEEPVAR_RESULTS")
+        echo "✅ DeepVaR results: $ROWS rows"
+    fi
+fi
+if [ "$NEED_DEEPVAR" = true ]; then
+    echo ""
+    echo "🧠 Training DeepVaR (epochs: $DEEPVAR_EPOCHS)..."
+    python /app/compute_deepvar.py --epochs "$DEEPVAR_EPOCHS" || echo "⚠️  DeepVaR training failed"
 fi
 
-# ── 3. Invalidate old VaR cache if it lacks DeepVaR columns ────────
+# ── 3. Check old VaR cache format ────────────────────────────────
 VAR_CACHE_DIR="/app/data/var_cache"
 if [ -d "$VAR_CACHE_DIR" ]; then
-    # Check a sample cache file for DeepVaR columns
-    SAMPLE_FILE=$(find "$VAR_CACHE_DIR" -name "*.csv" -print -quit 2>/dev/null)
-    if [ -n "$SAMPLE_FILE" ]; then
-        if ! head -1 "$SAMPLE_FILE" | grep -q "deepVaR95"; then
-            echo "🗑️  Old VaR cache detected (no DeepVaR columns). Removing..."
-            rm -rf "$VAR_CACHE_DIR"
-            echo "   Will recalculate with DeepVaR on startup."
-        else
-            echo "✅ VaR cache includes DeepVaR columns."
-        fi
+    SAMPLE=$(find "$VAR_CACHE_DIR" -name "*.csv" -print -quit 2>/dev/null)
+    if [ -n "$SAMPLE" ] && ! head -1 "$SAMPLE" | grep -q "deepVaR95"; then
+        echo "🗑️  Old VaR cache (no DeepVaR). Removing..."
+        rm -rf "$VAR_CACHE_DIR"
     fi
 fi
 
 echo ""
 echo "🚀 Starting uvicorn..."
-echo ""
-
 exec uvicorn main:app --host 0.0.0.0 --port 8000

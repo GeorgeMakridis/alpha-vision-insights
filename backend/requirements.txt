@@ -22,3 +22,4 @@ tqdm>=4.65.0
 # Daily data updater (Finnhub prices/news + FinBERT sentiment)
 finnhub-python>=2.4.0
 transformers>=4.30.0
+yfinance>=0.2.36

@@ -1,10 +1,9 @@
 #!/bin/bash
-# Load .env and start the stack (ensures FINNHUB_API_KEY etc. are passed to containers)
+# Start the stack using .env (no need to export FINNHUB_API_KEY manually)
+# Run: ./scripts/start-with-env.sh
 set -e
 cd "$(dirname "$0")/.."
-if [ -f .env ]; then
-  set -a
-  source .env
-  set +a
-fi
+set -a
+[ -f .env ] && source .env
+set +a
 docker-compose up -d "$@"

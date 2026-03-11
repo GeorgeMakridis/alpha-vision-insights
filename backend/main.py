@@ -581,15 +581,17 @@ def calculate_backtesting_stats(returns: pd.Series, metrics: Dict[str, float],
     
     return breach_stats
 
-def calculate_var_timeseries_for_asset(ticker: str, stock_data: pd.Series, rolling_window: int = 252) -> List[Dict[str, Any]]:
+def calculate_var_timeseries_for_asset(
+    ticker: str,
+    stock_data: pd.Series,
+    rolling_window: int = 252,
+    compute_from_date: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
     Calculate VaR time-series for a single asset with a given rolling window
     Also calculates breach flags for each day (out-of-sample backtesting)
     
-    Based on reference code approach:
-    - For each day i, calculate VaR using historical data up to day i-1
-    - Compare actual return on day i to the VaR threshold
-    - Mark breach if actual_return < VaR_threshold (both are negative, so breach when return is worse)
+    If compute_from_date is set, only append rows for dates >= compute_from_date (for incremental updates).
     """
     if stock_data.empty:
         return []
@@ -602,10 +604,17 @@ def calculate_var_timeseries_for_asset(ticker: str, stock_data: pd.Series, rolli
     
     timeseries_data = []
     
+    # For incremental: find first index where date >= compute_from_date
+    start_i = 0
+    if compute_from_date:
+        for i in range(len(returns)):
+            date_str = returns.index[i].strftime('%Y-%m-%d') if hasattr(returns.index[i], 'strftime') else str(returns.index[i])[:10]
+            if date_str >= compute_from_date:
+                start_i = i
+                break
+    
     # For each day, calculate VaR using available historical data
-    # IMPORTANT: Use the rolling_window parameter to determine how many historical days to use
-    # For days before rolling_window is available, use all available data (min 30 days)
-    for i in range(len(returns)):
+    for i in range(start_i, len(returns)):
         # Determine how much historical data we have
         available_days = i  # Days before current day
         
@@ -786,9 +795,17 @@ def load_var_timeseries_from_disk():
             continue
     
     if loaded_files > 0:
+        # Validate cache has DeepVaR columns (old format needs full recalc)
+        sample = next(
+            (ts[0] for t_data in var_timeseries_cache.values() for ts in t_data.values() if ts),
+            None
+        )
+        if sample is None or "deepVaR95" not in sample:
+            var_timeseries_cache = {}
+            return False
         total_data_points = sum(
-            len(timeseries) 
-            for ticker_data in var_timeseries_cache.values() 
+            len(timeseries)
+            for ticker_data in var_timeseries_cache.values()
             for timeseries in ticker_data.values()
         )
         print(f"📂 Loaded {loaded_files} VaR time-series files from disk ({total_data_points:,} data points)")
@@ -799,22 +816,76 @@ def load_var_timeseries_from_disk():
 async def precalculate_var_timeseries_async():
     """
     Pre-calculate VaR time-series for all assets with common rolling windows (async)
-    This includes VaR prices and breach flags for each day, following the reference code approach
-    Saves the results to disk for persistence
+    Loads from disk if available. If cache exists and price_data has newer dates, appends incrementally.
     """
     global var_timeseries_cache, price_data
     
     if price_data is None:
         return
     
+    rolling_windows = [60, 90, 120, 180, 252, 504]
+    
     # Try to load from disk first
     if load_var_timeseries_from_disk():
-        print("✅ Using pre-calculated VaR data from disk")
+        appended = 0
+        # Incremental: append new dates for cached tickers
+        for ticker in list(var_timeseries_cache.keys()):
+            if ticker not in price_data.columns:
+                continue
+            stock_data = price_data[ticker].dropna()
+            if stock_data.empty:
+                continue
+            price_latest = stock_data.index[-1]
+            price_latest_str = price_latest.strftime('%Y-%m-%d') if hasattr(price_latest, 'strftime') else str(price_latest)[:10]
+            
+            for window in rolling_windows:
+                if window not in var_timeseries_cache.get(ticker, {}):
+                    continue
+                cached = var_timeseries_cache[ticker][window]
+                if not cached:
+                    continue
+                last_cached_date = cached[-1].get("date", "")
+                if last_cached_date >= price_latest_str:
+                    continue
+                try:
+                    new_rows = calculate_var_timeseries_for_asset(
+                        ticker, stock_data, window, compute_from_date=last_cached_date
+                    )
+                    if new_rows:
+                        new_rows = [r for r in new_rows if r["date"] > last_cached_date]
+                        if new_rows:
+                            var_timeseries_cache[ticker][window] = cached + new_rows
+                            appended += len(new_rows)
+                except Exception as e:
+                    print(f"Error appending VaR for {ticker} window {window}: {e}")
+        
+        # Full calc for tickers not in cache (e.g. newly added)
+        for ticker in price_data.columns:
+            if ticker == 'Date':
+                continue
+            if ticker not in var_timeseries_cache:
+                stock_data = price_data[ticker].dropna()
+                if stock_data.empty:
+                    continue
+                var_timeseries_cache[ticker] = {}
+                for window in rolling_windows:
+                    try:
+                        timeseries = calculate_var_timeseries_for_asset(ticker, stock_data, window)
+                        var_timeseries_cache[ticker][window] = timeseries
+                        appended += len(timeseries)
+                    except Exception as e:
+                        print(f"Error calculating VaR for {ticker} window {window}: {e}")
+                        var_timeseries_cache[ticker][window] = []
+        
+        if appended > 0:
+            print(f"✅ VaR cache updated ({appended} new points)")
+            save_var_timeseries_to_disk()
+        else:
+            print("✅ Using pre-calculated VaR data from disk")
         return
     
+    # Full calculation
     print("Pre-calculating VaR time-series (with breaches) for all assets (this may take a few minutes)...")
-    rolling_windows = [60, 90, 120, 180, 252, 504]  # Common rolling window sizes
-    
     var_timeseries_cache = {}
     ticker_count = 0
     total_assets = len([c for c in price_data.columns if c != 'Date'])
@@ -822,37 +893,28 @@ async def precalculate_var_timeseries_async():
     for ticker in price_data.columns:
         if ticker == 'Date':
             continue
-        
         stock_data = price_data[ticker].dropna()
         if stock_data.empty:
             continue
-        
         var_timeseries_cache[ticker] = {}
-        
-        # Calculate for each rolling window
         for window in rolling_windows:
             try:
-                # This function now calculates VaR prices AND breach flags for each day
                 timeseries = calculate_var_timeseries_for_asset(ticker, stock_data, window)
                 var_timeseries_cache[ticker][window] = timeseries
             except Exception as e:
                 print(f"Error calculating VaR for {ticker} with window {window}: {e}")
                 var_timeseries_cache[ticker][window] = []
-        
         ticker_count += 1
         if ticker_count % 10 == 0:
             print(f"  Processed {ticker_count}/{total_assets} assets...")
     
-    # Calculate summary statistics
     total_calculations = sum(
-        len(timeseries) 
-        for ticker_data in var_timeseries_cache.values() 
+        len(timeseries)
+        for ticker_data in var_timeseries_cache.values()
         for timeseries in ticker_data.values()
     )
     print(f"✅ Pre-calculated VaR time-series for {len(var_timeseries_cache)} assets")
     print(f"   Total data points: {total_calculations:,} (VaR prices + breaches)")
-    
-    # Save to disk for persistence
     save_var_timeseries_to_disk()
 
 def load_data():
@@ -1100,59 +1162,33 @@ async def get_stock_price_history(
     
     # Convert to the format expected by frontend
     price_history = []
+    ticker_key = f"{ticker}.US"
     for date, price in recent_data.items():
-        # Calculate real sentiment from news data for this date
         sentiment = 0.0
         volume = 0
-        
-        # Look for news articles for this stock on this date
         date_str = date.strftime("%Y-%m-%d")
-        
-        # Temporary debug for specific dates
-        if ticker == "AAPL" and date_str in ["2025-02-01", "2025-02-02", "2025-02-03"]:
-            print(f"DEBUG: Processing {ticker} on {date_str}")
         
         if date_str in news_data:
             stock_news = news_data[date_str]
-            
-            # Look for this ticker in the news data
-            found_stock = False
-            for stock_ticker, articles in stock_news.items():
-                # Convert ticker format (e.g., "AIG.US" -> "AIG")
-                clean_ticker = stock_ticker.split('.')[0]
-                
-                if clean_ticker == ticker:
-                    found_stock = True
-                    # Calculate average sentiment from all articles for this stock on this date
-                    if articles:
-                        sentiments = [article.get("sentiment", 0.0) for article in articles]
-                        sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
-                        volume = len(articles)  # Use number of articles as volume
-                        
-                        # Temporary debug
-                        if ticker == "AAPL" and date_str in ["2025-02-01", "2025-02-02", "2025-02-03"]:
-                            print(f"  Found {len(articles)} articles, sentiment: {sentiment:.3f}, volume: {volume}")
-                    break
-            
-            # Temporary debug if stock not found
-            if not found_stock and ticker == "AAPL" and date_str in ["2025-02-01", "2025-02-02", "2025-02-03"]:
-                print(f"  Stock {ticker} not found on {date_str}")
-        
-        # If no news found for this date, use 0 volume (no random fallback)
-        if volume == 0:
-            sentiment = 0.0  # Neutral sentiment when no news
-            volume = 0  # No volume when no news
-            
-            # Temporary debug
-            if ticker == "AAPL" and date_str in ["2025-02-01", "2025-02-02", "2025-02-03"]:
-                print(f"  No news found, using zero: sentiment: {sentiment:.3f}, volume: {volume}")
+            if ticker_key in stock_news:
+                articles = stock_news[ticker_key]
+                if articles:
+                    sentiments = [article.get("sentiment", 0.0) for article in articles]
+                    sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
+                    volume = len(articles)
         
         price_history.append({
-            "date": date.strftime("%Y-%m-%d"),
+            "date": date_str,
             "price": float(price),
             "sentiment": float(sentiment),
             "volume": int(volume)
         })
+    
+    # Apply 5-day rolling average to smooth sentiment (avoids flat line when news is sparse)
+    if price_history:
+        df = pd.DataFrame(price_history)
+        df["sentiment"] = df["sentiment"].rolling(window=5, center=True, min_periods=1).mean()
+        price_history = df.to_dict("records")
     
     return {"priceHistory": price_history}
 
@@ -1167,26 +1203,24 @@ async def get_stock_news(
     
     news_items = []
     
-    # Search for news items containing the ticker
+    # Search for news items containing the ticker (keys are "AAPL.US", "BRK.B.US", etc.)
+    ticker_key = f"{ticker}.US"
     for date, stocks_news in news_data.items():
-        for stock_ticker, articles in stocks_news.items():
-            # Convert ticker format (e.g., "AIG.US" -> "AIG")
-            clean_ticker = stock_ticker.split('.')[0]
-            
-            if clean_ticker == ticker:
-                for article in articles:
-                    try:
-                        news_items.append({
-                            "title": article["title"],
-                            "source": article.get("publisher", "Unknown"),
-                            "date": article["date"][:10],  # Extract date part
-                            "sentiment": article["sentiment"],
-                            "url": article["link"],
-                            "content": article.get("content", "")  # Include article content
-                        })
-                    except KeyError as e:
-                        print(f"Missing key in article: {e}")
-                        continue
+        if ticker_key in stocks_news:
+            articles = stocks_news[ticker_key]
+            for article in articles:
+                try:
+                    news_items.append({
+                        "title": article["title"],
+                        "source": article.get("publisher", "Unknown"),
+                        "date": article["date"][:10],  # Extract date part
+                        "sentiment": article["sentiment"],
+                        "url": article["link"],
+                        "content": article.get("content", "")  # Include article content
+                    })
+                except KeyError as e:
+                    print(f"Missing key in article: {e}")
+                    continue
     
     # Sort by date (newest first) and limit results
     news_items.sort(key=lambda x: x["date"], reverse=True)
@@ -1475,23 +1509,17 @@ async def get_portfolio_price_history(request: PortfolioPriceHistoryRequest):
                     
                     if date_str in news_data:
                         stock_news = news_data[date_str]
-                        # Look for this ticker in the news data
-                        for stock_ticker, articles in stock_news.items():
-                            # Convert ticker format (e.g., "AIG.US" -> "AIG")
-                            clean_ticker = stock_ticker.split('.')[0]
-                            
-                            if clean_ticker == ticker:
-                                # Calculate average sentiment from all articles for this stock on this date
-                                if articles:
-                                    sentiments = [article.get("sentiment", 0.0) for article in articles]
-                                    stock_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
-                                    stock_volume = len(articles)  # Use number of articles as volume
-                                break
+                        ticker_key = f"{ticker}.US"
+                        if ticker_key in stock_news:
+                            articles = stock_news[ticker_key]
+                            if articles:
+                                sentiments = [article.get("sentiment", 0.0) for article in articles]
+                                stock_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
+                                stock_volume = len(articles)
                     
-                    # If no news found for this date, use a small random variation around 0
                     if stock_volume == 0:
-                        stock_sentiment = np.random.uniform(-0.1, 0.1)  # Small random sentiment
-                        stock_volume = np.random.randint(1000, 5000)  # Low volume
+                        stock_sentiment = 0.0
+                        stock_volume = 0
                     
                     # Add weighted sentiment and volume to portfolio
                     portfolio_sentiment += stock_sentiment * weight
@@ -1509,6 +1537,12 @@ async def get_portfolio_price_history(request: PortfolioPriceHistoryRequest):
                 "sentiment": float(portfolio_sentiment),
                 "volume": int(portfolio_volume)
             })
+    
+    # Apply 5-day rolling average to smooth sentiment
+    if portfolio_history:
+        df = pd.DataFrame(portfolio_history)
+        df["sentiment"] = df["sentiment"].rolling(window=5, center=True, min_periods=1).mean()
+        portfolio_history = df.to_dict("records")
     
     return {"priceHistory": portfolio_history}
 
