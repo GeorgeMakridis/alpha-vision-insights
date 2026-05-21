@@ -40,3 +40,10 @@ sp100_*.csv
 __pycache__/
 *.pyc
 *.pyo
+
+# Local integration scratch copies (not part of the app)
+files/
+files-10/
+files-11/
+files-12/
+files-21/
