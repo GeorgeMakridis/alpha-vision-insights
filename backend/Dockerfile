@@ -16,8 +16,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Make entrypoint executable
-RUN chmod +x /app/entrypoint.sh
+# Make entrypoint and post-start scripts executable
+RUN chmod +x /app/entrypoint.sh /app/post_start.sh
 
 # Create data directories (data files will be mounted as volume)
 RUN mkdir -p /app/data /app/data/deepvar_results

@@ -23,6 +23,20 @@ import {
   TooltipContent 
 } from "./ui/tooltip";
 import { Info, CircleDashed } from "lucide-react";
+import { Link } from "react-router-dom";
+import ModelBadge from "@/components/legal/ModelBadge";
+import type { ModelLabelKey } from "@/constants/modelLabels";
+
+const VAR_METHOD_LABEL: Partial<Record<string, ModelLabelKey>> = {
+  deepVaR95: "deepVaR",
+  deepVaR99: "deepVaR",
+  parametricVaR95: "parametricVaR",
+  parametricVaR99: "parametricVaR",
+  monteCarloVaR95: "monteCarloVaR",
+  monteCarloVaR99: "monteCarloVaR",
+  blnnVaR95: "blnnVaR",
+  blnnVaR99: "blnnVaR",
+};
 
 interface AssetVaRChartProps {
   ticker: string;
@@ -51,6 +65,7 @@ export default function AssetVaRChart({ ticker, days: initialDays = 60, onDaysCh
   const [selectedVaRMethods, setSelectedVaRMethods] = useState<string[]>([
     'parametricVaR95',
     'monteCarloVaR95',
+    'deepVaR95',
     'blnnVaR95',
   ]);
   
@@ -195,9 +210,10 @@ export default function AssetVaRChart({ ticker, days: initialDays = 60, onDaysCh
   return (
     <CardGradient className="h-[500px]">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-medium">Price & VaR Analysis</h3>
-          <TooltipProvider>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-medium">Price & VaR Analysis</h3>
+            <TooltipProvider>
             <UITooltip>
               <TooltipTrigger asChild>
                 <Info className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -207,6 +223,13 @@ export default function AssetVaRChart({ ticker, days: initialDays = 60, onDaysCh
               </TooltipContent>
             </UITooltip>
           </TooltipProvider>
+          </div>
+          <p className="text-xs text-slate-500">
+            Model-based estimates only ·{" "}
+            <Link to="/methodology#deepvar" className="text-dashboard-accent underline">
+              Methodology
+            </Link>
+          </p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -260,6 +283,9 @@ export default function AssetVaRChart({ ticker, days: initialDays = 60, onDaysCh
                     >
                       {method.name}
                     </Label>
+                    {VAR_METHOD_LABEL[method.key] && (
+                      <ModelBadge kind={VAR_METHOD_LABEL[method.key]!} />
+                    )}
                     <CircleDashed className="h-3 w-3 text-muted-foreground" />
                   </div>
                 </TooltipTrigger>

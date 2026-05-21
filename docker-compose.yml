@@ -1,5 +1,5 @@
 services:
-  # Backend API Service (entrypoint trains DeepVaR on first run if needed)
+  # Backend API: uvicorn first; DeepVaR/data updater run in post_start.sh (background).
   alphavision-backend:
     build:
       context: ./backend
@@ -21,13 +21,28 @@ services:
       - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
       - DATA_AUTO_UPDATE=${DATA_AUTO_UPDATE:-false}
       - DATA_UPDATE_HOUR=${DATA_UPDATE_HOUR:-6}
+      - DATA_REFRESH_SENTIMENT=${DATA_REFRESH_SENTIMENT:-false}
+      # Wider backfill for news/prices on startup (e.g. 365). Default 10.
+      - DATA_UPDATER_DAYS=${DATA_UPDATER_DAYS:-10}
+      # After post_start updates disk, backend calls POST /api/admin/reload-data (localhost only).
+      - INTERNAL_RELOAD_TOKEN=${INTERNAL_RELOAD_TOKEN:-}
+      - SKIP_POST_START_TASKS=${SKIP_POST_START_TASKS:-}
+      # Hugging Face: optional token + cache dir (persists under ./backend/data if HF_HOME is under /app/data)
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HOME=${HF_HOME:-/app/data/hf_home}
+      # Yahoo price fetch: retries/backoff when fc.yahoo.com is flaky (see README troubleshooting)
+      - YFINANCE_DOWNLOAD_RETRIES=${YFINANCE_DOWNLOAD_RETRIES:-5}
+      - YFINANCE_RETRY_BACKOFF_BASE_SEC=${YFINANCE_RETRY_BACKOFF_BASE_SEC:-3}
+      - YFINANCE_RETRY_BACKOFF_MAX_SEC=${YFINANCE_RETRY_BACKOFF_MAX_SEC:-60}
+      - YFINANCE_DOWNLOAD_THREADS=${YFINANCE_DOWNLOAD_THREADS:-false}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 3600s
+      # Uvicorn starts immediately; post_start (data + DeepVaR) runs in background.
+      start_period: 120s
     networks:
       - alphavision-network
 

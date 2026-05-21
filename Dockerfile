@@ -7,7 +7,6 @@ RUN apk add --no-cache curl
 
 # Copy package files
 COPY package*.json ./
-COPY bun.lockb ./
 
 # Install all dependencies (including dev dependencies for build)
 RUN npm ci

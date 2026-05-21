@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiService } from "@/services/api";
 import { CardGradient } from "./ui/card-gradient";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import ModelBadge from "@/components/legal/ModelBadge";
 
 interface VaRSummaryStatisticsProps {
   ticker: string;
@@ -154,6 +155,7 @@ export default function VaRSummaryStatistics({ ticker, days }: VaRSummaryStatist
           <p className="text-sm text-muted-foreground">
             {days ? `Last ${days} days` : 'All available data'} | Rolling Window: {ROLLING_WINDOW} days
           </p>
+          <p className="text-xs text-slate-500 mt-1">Model-based estimates only — not investment advice.</p>
         </div>
         
         <div className="overflow-x-auto">
@@ -161,14 +163,54 @@ export default function VaRSummaryStatistics({ ticker, days }: VaRSummaryStatist
             <TableHeader>
               <TableRow>
                 <TableHead>Metric</TableHead>
-                <TableHead className="text-right">Parametric VaR 95%</TableHead>
-                <TableHead className="text-right">Monte Carlo VaR 95%</TableHead>
-                <TableHead className="text-right">Deep VaR 95%</TableHead>
-                <TableHead className="text-right">BLNNVaR 95%</TableHead>
-                <TableHead className="text-right">Parametric VaR 99%</TableHead>
-                <TableHead className="text-right">Monte Carlo VaR 99%</TableHead>
-                <TableHead className="text-right">Deep VaR 99%</TableHead>
-                <TableHead className="text-right">BLNNVaR 99%</TableHead>
+                <TableHead className="text-right align-top">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>Parametric VaR 95%</span>
+                    <ModelBadge kind="parametricVaR" />
+                  </div>
+                </TableHead>
+                <TableHead className="text-right align-top">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>Monte Carlo VaR 95%</span>
+                    <ModelBadge kind="monteCarloVaR" />
+                  </div>
+                </TableHead>
+                <TableHead className="text-right align-top">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>Deep VaR 95%</span>
+                    <ModelBadge kind="deepVaR" />
+                  </div>
+                </TableHead>
+                <TableHead className="text-right align-top">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>BLNNVaR 95%</span>
+                    <ModelBadge kind="blnnVaR" />
+                  </div>
+                </TableHead>
+                <TableHead className="text-right align-top">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>Parametric VaR 99%</span>
+                    <ModelBadge kind="parametricVaR" />
+                  </div>
+                </TableHead>
+                <TableHead className="text-right align-top">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>Monte Carlo VaR 99%</span>
+                    <ModelBadge kind="monteCarloVaR" />
+                  </div>
+                </TableHead>
+                <TableHead className="text-right align-top">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>Deep VaR 99%</span>
+                    <ModelBadge kind="deepVaR" />
+                  </div>
+                </TableHead>
+                <TableHead className="text-right align-top">
+                  <div className="flex flex-col items-end gap-1">
+                    <span>BLNNVaR 99%</span>
+                    <ModelBadge kind="blnnVaR" />
+                  </div>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

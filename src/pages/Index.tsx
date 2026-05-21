@@ -13,8 +13,11 @@ import PortfolioChart from "@/components/PortfolioChart";
 import PortfolioVaRChart from "@/components/PortfolioVaRChart";
 import AssetNewsHeadlines from "@/components/AssetNewsHeadlines";
 import RiskChatbot from "@/components/RiskChatbot";
+import ComplianceStrip from "@/components/legal/ComplianceStrip";
+import SiteFooter from "@/components/layout/SiteFooter";
 import { apiService } from "@/services/api";
-import { BarChart, TrendingUp, Info } from "lucide-react";
+import { TAGLINE } from "@/constants/legal";
+import { BarChart, TrendingUp } from "lucide-react";
 
 const Index = () => {
   // Asset Analysis state
@@ -193,15 +196,14 @@ const Index = () => {
                 AlphaVision
               </h1>
             </div>
-            <div className="flex items-center gap-2 text-slate-400">
-              <div className="flex items-center gap-1">
-                <Info className="h-4 w-4" />
-                <span className="text-sm">Financial Analysis Dashboard</span>
-              </div>
-            </div>
+            <p className="text-sm text-slate-400 max-w-md text-right hidden sm:block">
+              {TAGLINE}
+            </p>
           </div>
         </div>
       </header>
+
+      <ComplianceStrip />
 
       <main className="container max-w-7xl mx-auto px-4 py-8">
         <Tabs defaultValue="asset-analysis" className="space-y-8">
@@ -297,18 +299,7 @@ const Index = () => {
         </Tabs>
       </main>
       
-      <footer className="border-t border-slate-800 py-4 mt-8">
-        <div className="container max-w-7xl mx-auto px-4">
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-slate-400">
-              AlphaVision Dashboard | Financial Risk Analytics Platform
-            </p>
-            <p className="text-sm text-slate-500">
-              Real-time data from S&P 100 stocks
-            </p>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
 
       <RiskChatbot
         selectedAsset={selectedAsset}

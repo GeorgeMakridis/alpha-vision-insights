@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { apiService } from "@/services/api";
 import { MessageSquare, X, Send, Bot, User, Loader2, Trash2 } from "lucide-react";
+import { Link } from "react-router-dom";
+import ModelBadge from "@/components/legal/ModelBadge";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -168,11 +170,14 @@ export default function RiskChatbot({
                 <Bot className="h-4.5 w-4.5 text-white" />
               </div>
               <div>
-                <h3 className="text-sm font-semibold text-white leading-tight">
-                  AlphaVision Risk Analyst
-                </h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-sm font-semibold text-white leading-tight">
+                    AlphaVision Risk Analyst
+                  </h3>
+                  <ModelBadge kind="chat" />
+                </div>
                 <p className="text-[11px] text-slate-400 leading-tight">
-                  RAG-powered • S&P 100 data
+                  Educational only · Not investment advice
                 </p>
               </div>
             </div>
@@ -360,8 +365,16 @@ export default function RiskChatbot({
                 <Send className="h-4 w-4" />
               </button>
             </div>
-            <p className="text-[10px] text-slate-600 text-center mt-1.5">
-              Powered by OpenAI • Grounded in your dashboard data
+            <p className="text-[10px] text-slate-500 text-center mt-1.5 leading-relaxed px-1">
+              Do not share personal or account information. Messages may be processed by a
+              third-party LLM.{" "}
+              <Link to="/privacy" className="text-dashboard-accent underline">
+                Privacy
+              </Link>
+              {" · "}
+              <Link to="/disclaimer" className="text-dashboard-accent underline">
+                Disclaimer
+              </Link>
             </p>
           </div>
         </div>

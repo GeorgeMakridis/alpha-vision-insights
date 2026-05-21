@@ -23,6 +23,7 @@ import {
   TooltipContent 
 } from "./ui/tooltip";
 import { Info } from "lucide-react";
+import ModelBadge from "@/components/legal/ModelBadge";
 
 interface AssetChartProps {
   ticker: string;
@@ -102,9 +103,12 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
   return (
     <CardGradient className="h-[400px]">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-medium">Price & Market Sentiment</h3>
-          <TooltipProvider>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-medium">Price & Market Sentiment</h3>
+            <ModelBadge kind="marketData" />
+            <ModelBadge kind="newsSentiment" />
+            <TooltipProvider>
             <UITooltip>
               <TooltipTrigger asChild>
                 <Info className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -119,6 +123,10 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
               </TooltipContent>
             </UITooltip>
           </TooltipProvider>
+          </div>
+          <p className="text-xs text-slate-500">
+            Sentiment bars use AI-scored news where available (FinBERT).
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="period-select-sentiment" className="text-sm text-muted-foreground">

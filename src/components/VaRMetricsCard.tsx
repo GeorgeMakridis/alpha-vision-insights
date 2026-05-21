@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import ModelBadge from "@/components/legal/ModelBadge";
 
 interface VaRMetricsCardProps {
   ticker: string;
@@ -95,7 +96,7 @@ export default function VaRMetricsCard({ ticker, days }: VaRMetricsCardProps) {
   
   return (
     <CardGradient>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <Sparkles className="text-dashboard-accent h-5 w-5" />
           <h3 className="text-lg font-medium">Value at Risk (VaR) Metrics</h3>
@@ -118,8 +119,8 @@ export default function VaRMetricsCard({ ticker, days }: VaRMetricsCardProps) {
           </Tooltip>
         </TooltipProvider>
       </div>
-      
-      
+      <p className="text-xs text-slate-500 mb-4">Estimates only — not investment advice.</p>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* 95% Confidence VaR */}
         <div className="bg-slate-800/50 rounded-lg p-4">
@@ -134,7 +135,10 @@ export default function VaRMetricsCard({ ticker, days }: VaRMetricsCardProps) {
               <div className="border border-slate-700 rounded-lg p-3">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="text-sm font-medium">Parametric VaR</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium">Parametric VaR</p>
+                      <ModelBadge kind="parametricVaR" />
+                    </div>
                     <p className="text-xs text-muted-foreground">Normal distribution assumption</p>
                   </div>
                   <p className="text-xl font-bold text-dashboard-negative">
@@ -170,7 +174,10 @@ export default function VaRMetricsCard({ ticker, days }: VaRMetricsCardProps) {
               <div className="border border-slate-700 rounded-lg p-3">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="text-sm font-medium">Monte Carlo VaR</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium">Monte Carlo VaR</p>
+                      <ModelBadge kind="monteCarloVaR" />
+                    </div>
                     <p className="text-xs text-muted-foreground">Simulation-based estimation</p>
                   </div>
                   <p className="text-xl font-bold text-dashboard-negative">
@@ -216,7 +223,10 @@ export default function VaRMetricsCard({ ticker, days }: VaRMetricsCardProps) {
               <div className="border border-slate-700 rounded-lg p-3">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="text-sm font-medium">Parametric VaR</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium">Parametric VaR</p>
+                      <ModelBadge kind="parametricVaR" />
+                    </div>
                     <p className="text-xs text-muted-foreground">Normal distribution assumption</p>
                   </div>
                   <p className="text-xl font-bold text-dashboard-negative">
@@ -252,7 +262,10 @@ export default function VaRMetricsCard({ ticker, days }: VaRMetricsCardProps) {
               <div className="border border-slate-700 rounded-lg p-3">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <p className="text-sm font-medium">Monte Carlo VaR</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium">Monte Carlo VaR</p>
+                      <ModelBadge kind="monteCarloVaR" />
+                    </div>
                     <p className="text-xs text-muted-foreground">Simulation-based estimation</p>
                   </div>
                   <p className="text-xl font-bold text-dashboard-negative">

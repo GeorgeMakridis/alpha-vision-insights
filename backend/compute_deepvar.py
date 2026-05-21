@@ -45,6 +45,8 @@ def main():
     parser.add_argument("--epochs", type=int, default=sp.EPOCHS, help=f"Training epochs (default: {sp.EPOCHS})")
     parser.add_argument("--context-length", type=int, default=sp.CONTEXT_LENGTH, help=f"Context length (default: {sp.CONTEXT_LENGTH})")
     parser.add_argument("--skip-training", action="store_true", help="Skip training, only re-run backtest")
+    parser.add_argument("--incremental", action="store_true",
+                        help="Load model, predict only new dates, append to CSV (no retraining)")
     parser.add_argument("--data-path", type=str, default=sp.path, help="Path to price CSV")
     args = parser.parse_args()
 
@@ -88,6 +90,57 @@ def main():
     print("\n📊 Loading and preprocessing data...")
     predictor.load_data()
 
+    dashboard_file = results_dir / "deepvar_dashboard.csv"
+    model_path = results_dir / "deepar_model"
+
+    # ─── Incremental mode: load model, predict new dates only, append to CSV ───
+    if args.incremental:
+        if not dashboard_file.exists():
+            print("⚠️  No existing dashboard. Running full training instead.")
+            args.incremental = False
+        elif not model_path.exists():
+            print("⚠️  No saved model found. Running full training instead.")
+            args.incremental = False
+        else:
+            # Find latest next_date in existing dashboard
+            existing_df = pd.read_csv(dashboard_file)
+            existing_df['next_date'] = pd.to_datetime(existing_df['next_date'])
+            latest_next = pd.Timestamp(existing_df['next_date'].max())
+            latest_next_str = latest_next.strftime('%Y-%m-%d') if hasattr(latest_next, 'strftime') else str(latest_next)[:10]
+
+            # Find first new date in price data (after latest_next)
+            price_dates = pd.to_datetime(predictor.returns_data.index)
+            new_dates = price_dates[price_dates > latest_next]
+            if len(new_dates) == 0:
+                print("✅ No new dates to process. DeepVaR is up to date.")
+                sys.exit(0)
+
+            first_new_date = new_dates.min()
+            print(f"📅 Incremental update: {latest_next_str} -> {first_new_date.strftime('%Y-%m-%d')} ({len(new_dates)} new days)")
+
+            predictor.load_model(model_path)
+            # Per-day one-step predictions (batch predict_all reuses one forecast per ticker)
+            backtest_df = predictor.run_incremental_backtest(first_new_date)
+
+            if backtest_df is not None and len(backtest_df) > 0:
+                new_results = backtest_df.copy()
+                new_results['deepVaR95'] = (new_results['var_5'] - 1) * 100
+                new_results['deepVaR99'] = (new_results['var_1'] - 1) * 100
+                new_results['actual_return_pct'] = (new_results['actual_return'] - 1) * 100
+                new_results['deepBreach95'] = (new_results['actual_return_pct'] < new_results['deepVaR95']).astype(int)
+                new_results['deepBreach99'] = (new_results['actual_return_pct'] < new_results['deepVaR99']).astype(int)
+
+                cols_to_save = ['date', 'next_date', 'ticker', 'deepVaR95', 'deepVaR99', 'actual_return_pct',
+                               'deepBreach95', 'deepBreach99', 'predicted_mean', 'predicted_median', 'var_5', 'var_1']
+                new_df = new_results[cols_to_save].copy()
+                new_df['next_date'] = new_df['next_date'].astype(str).str[:10]
+                existing_df['next_date'] = existing_df['next_date'].astype(str).str[:10]
+                combined = pd.concat([existing_df, new_df], ignore_index=True)
+                combined = combined.drop_duplicates(subset=['ticker', 'next_date'], keep='last')
+                combined.to_csv(dashboard_file, index=False)
+                print(f"✅ Appended {len(new_results)} rows. Total: {len(combined)}")
+            sys.exit(0)
+
     total_days = len(predictor.returns_data)
     train_ratio = 1 - (sp.NUMBER_OF_TEST + sp.NUMBER_OF_VAL) / total_days
     val_ratio = sp.NUMBER_OF_VAL / total_days
@@ -100,6 +153,7 @@ def main():
     if not args.skip_training:
         print("\n🧠 Training DeepAR model (this may take a while)...")
         predictor.train_all_models()
+        predictor.save_model()
     else:
         print("\n⏭️  Skipping training (--skip-training flag)")
 
@@ -127,7 +181,6 @@ def main():
             dashboard_results['actual_return_pct'] < dashboard_results['deepVaR99']
         ).astype(int)
 
-        dashboard_file = results_dir / "deepvar_dashboard.csv"
         cols_to_save = [
             'date', 'next_date', 'ticker',
             'deepVaR95', 'deepVaR99',

@@ -44,9 +44,15 @@ check_docker() {
 setup_backend() {
     print_status "Setting up backend data..."
     
+    # Skip if data already exists in backend/data
+    if [ -f "backend/data/sp100_daily_prices.csv" ] && [ -f "backend/data/news_sentiment_updated.json" ]; then
+        print_success "Backend data already present (backend/data/)"
+        return 0
+    fi
+    
     if [ ! -f "sp100_daily_prices.csv" ] || [ ! -f "news_sentiment_updated.json" ]; then
-        print_error "Data files not found in root directory"
-        print_status "Please ensure sp100_daily_prices.csv and news_sentiment_updated.json are in the root directory"
+        print_error "Data files not found"
+        print_status "Either place sp100_daily_prices.csv and news_sentiment_updated.json in root, or run the data updater first"
         exit 1
     fi
     
@@ -68,9 +74,9 @@ deploy_production() {
     
     print_success "Production stack deployed"
     print_status "Services will be available at:"
-    echo "  - Frontend: http://localhost:8080"
-    echo "  - Backend API: http://localhost:8000"
-    echo "  - API Docs: http://localhost:8000/docs"
+    echo "  - Frontend: http://localhost:8081"
+    echo "  - Backend API: http://localhost:8001"
+    echo "  - API Docs: http://localhost:8001/docs"
 }
 
 # Build and run development stack
@@ -98,14 +104,14 @@ check_health() {
     sleep 10
     
     # Check backend health
-    if curl -f http://localhost:8000/health > /dev/null 2>&1; then
+    if curl -f http://localhost:8001/health > /dev/null 2>&1; then
         print_success "Backend is healthy"
     else
         print_warning "Backend health check failed"
     fi
     
     # Check frontend health
-    if curl -f http://localhost:8080 > /dev/null 2>&1; then
+    if curl -f http://localhost:8081 > /dev/null 2>&1; then
         print_success "Frontend is healthy"
     else
         print_warning "Frontend health check failed"

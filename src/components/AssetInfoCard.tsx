@@ -8,6 +8,23 @@ interface AssetInfoCardProps {
   ticker: string;
 }
 
+/** Format USD market cap for display; missing/zero shows as N/A. */
+function formatMarketCap(cap: number): string {
+  if (cap == null || Number.isNaN(cap) || cap <= 0) {
+    return "N/A";
+  }
+  if (cap >= 1e12) {
+    return `$${(cap / 1e12).toFixed(2)}T`;
+  }
+  if (cap >= 1e9) {
+    return `$${(cap / 1e9).toFixed(2)}B`;
+  }
+  if (cap >= 1e6) {
+    return `$${(cap / 1e6).toFixed(2)}M`;
+  }
+  return `$${cap.toFixed(0)}`;
+}
+
 export default function AssetInfoCard({ ticker }: AssetInfoCardProps) {
   // Fetch stock data
   const { data: stocksData, isLoading: stocksLoading, error: stocksError } = useQuery({
@@ -103,7 +120,7 @@ export default function AssetInfoCard({ ticker }: AssetInfoCardProps) {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <p className="text-sm text-muted-foreground">Market Cap</p>
-            <p className="font-medium">${(stock.marketCap / 1e9).toFixed(2)}B</p>
+            <p className="font-medium">{formatMarketCap(stock.marketCap ?? 0)}</p>
           </div>
           <div>
             <p className="text-sm text-muted-foreground">Sharpe Ratio</p>

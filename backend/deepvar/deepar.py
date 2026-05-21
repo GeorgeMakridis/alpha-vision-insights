@@ -7,14 +7,18 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 import os
+from collections import defaultdict
+from typing import Optional
 from tqdm import tqdm
 from datetime import datetime, timedelta
 
 # GluonTS imports
+from gluonts.dataset.common import ListDataset
 from gluonts.dataset.pandas import PandasDataset
 from gluonts.torch.model.deepar import DeepAREstimator
 from gluonts.torch.distributions import StudentTOutput
 from gluonts.evaluation import make_evaluation_predictions
+from gluonts.model.predictor import Predictor
 
 # PyTorch Lightning
 import pytorch_lightning as pl
@@ -163,6 +167,32 @@ class StockReturnPredictor:
         self.val_end_idx = train_size + val_size
         
         return self.train_dataset, self.val_dataset, self.test_dataset
+
+    def prepare_incremental_dataset(self, first_new_date):
+        """
+        Prepare dataset for incremental prediction from first_new_date to end.
+        Used when loading a saved model to predict only new dates.
+        """
+        if isinstance(first_new_date, str):
+            first_new_date = pd.Timestamp(first_new_date)
+        idx = self.returns_data.index.get_loc(first_new_date)
+        if isinstance(idx, slice):
+            idx = idx.start if idx.start is not None else 0
+        # Need context for the first prediction; val_end_idx = day before first_new_date
+        context_start_idx = max(0, idx - self.context_length - 1)
+        context_start = self.returns_data.index[context_start_idx]
+        test_data = self.returns_data.loc[context_start:].copy()
+        self.val_end_idx = max(0, idx - 1)
+        test_long = self._convert_to_long_format(test_data)
+        self.test_dataset = PandasDataset.from_long_dataframe(
+            test_long,
+            item_id="item_id",
+            timestamp="timestamp",
+            target="target",
+            freq=self.freq
+        )
+        print(f"Incremental dataset: {len(test_data)} rows from {test_data.index[0]} to {test_data.index[-1]}")
+        return self.test_dataset
     
     def train_model(self):
         """Train a DeepAR model for all stocks together with validation."""
@@ -216,6 +246,26 @@ class StockReturnPredictor:
         self._plot_loss_curves()
         
         return self.model
+
+    def save_model(self, path=None):
+        """Save the trained predictor to disk for incremental updates."""
+        if not hasattr(self, 'model') or self.model is None:
+            raise ValueError("No model to save. Call train_all_models() first.")
+        save_path = Path(path) if path else self.results_dir / "deepar_model"
+        save_path = Path(save_path)
+        save_path.mkdir(parents=True, exist_ok=True)
+        self.model.serialize(save_path)
+        print(f"Model saved to {save_path}")
+
+    def load_model(self, path=None):
+        """Load a previously saved predictor from disk."""
+        load_path = Path(path) if path else self.results_dir / "deepar_model"
+        load_path = Path(load_path)
+        if not load_path.exists():
+            raise FileNotFoundError(f"Model not found at {load_path}")
+        self.model = Predictor.deserialize(load_path)
+        print(f"Model loaded from {load_path}")
+        return self.model
     
     def _plot_loss_curves(self):
         """Plot training and validation loss curves."""
@@ -256,18 +306,28 @@ class StockReturnPredictor:
         forecasts = list(forecast_it)
         tss = list(ts_it)
         print(f"Generated {len(forecasts)} forecasts")
-        
-        try:
-            unique_item_ids = sorted(set(item['item_id'] for item in dataset))
-            for i, item_id in enumerate(unique_item_ids):
-                if i < len(forecasts):
-                    self.forecasts[item_id] = {'predictions': forecasts[i], 'actuals': tss[i]}
-        except (TypeError, AttributeError):
+
+        # GluonTS returns one forecast per rolling window (many per ticker on long test sets).
+        by_item: dict = defaultdict(list)
+        for forecast, ts in zip(forecasts, tss):
+            item_id = getattr(ts, "item_id", None)
+            if item_id is None and isinstance(ts, dict):
+                item_id = ts.get("item_id")
+            if item_id is None:
+                continue
+            by_item[str(item_id)].append(forecast)
+
+        self.forecasts = {}
+        for item_id, fc_list in by_item.items():
+            self.forecasts[item_id] = {"predictions": fc_list, "actuals": None}
+
+        if not self.forecasts:
+            # Fallback: one forecast per ticker (legacy short test sets)
             tickers = self.returns_data.columns.tolist()
             for i, ticker in enumerate(tickers):
                 if i < len(forecasts):
-                    self.forecasts[ticker] = {'predictions': forecasts[i], 'actuals': tss[i]}
-        
+                    self.forecasts[ticker] = {"predictions": forecasts[i], "actuals": tss[i]}
+
         print(f"Mapped predictions for {len(self.forecasts)} tickers")
         return self.forecasts
     
@@ -284,7 +344,8 @@ class StockReturnPredictor:
         
         all_mse, all_mae, all_mape = [], [], []
         for ticker, forecast_data in tqdm(self.forecasts.items(), desc="Evaluating"):
-            forecast = forecast_data['predictions']
+            pred_entry = forecast_data["predictions"]
+            forecast = pred_entry[-1] if isinstance(pred_entry, list) else pred_entry
             if ticker in self.returns_data.columns:
                 actual_returns = self.returns_data[ticker].iloc[start_idx:start_idx + len(forecast.samples[0])]
                 pred_median = forecast.quantile(0.5)
@@ -309,6 +370,80 @@ class StockReturnPredictor:
     
     def evaluate_all(self):
         return self.evaluate_model(self.test_dataset, self.val_end_idx)
+
+    def _predict_single_step_quantiles(self, ticker: str, origin_date) -> Optional[dict]:
+        """
+        One-step-ahead return quantiles from the saved model at ``origin_date``.
+        Used for incremental updates when batch evaluation returns one forecast per ticker.
+        """
+        if not hasattr(self, "model") or self.model is None:
+            return None
+        origin = pd.Timestamp(origin_date)
+        series = self.returns_data[ticker].dropna()
+        series = series.loc[:origin]
+        if len(series) < self.context_length:
+            return None
+        window = series.iloc[-self.context_length :].astype(np.float32)
+        ds = ListDataset(
+            [{"start": window.index[0], "target": window.values}],
+            freq=self.freq,
+        )
+        try:
+            forecasts = list(self.model.predict(ds))
+        except Exception:
+            return None
+        if not forecasts:
+            return None
+        samples = forecasts[0].samples[:, 0]
+        return {
+            "var_5": float(np.quantile(samples, 0.05)),
+            "var_1": float(np.quantile(samples, 0.01)),
+            "predicted_mean": float(samples.mean()),
+            "predicted_median": float(np.median(samples)),
+        }
+
+    def run_incremental_backtest(self, first_new_date) -> pd.DataFrame:
+        """
+        Backtest only new trading days with per-day rolling one-step predictions.
+        """
+        first_new = pd.Timestamp(first_new_date)
+        loc = self.returns_data.index.get_loc(first_new)
+        if isinstance(loc, slice):
+            start_idx = loc.start if loc.start is not None else 0
+        else:
+            start_idx = int(loc)
+        # Origin index: day before first_new so first prediction targets first_new
+        start_idx = max(0, start_idx - 1)
+        test_dates = self.returns_data.index[start_idx:]
+        tickers = list(self.returns_data.columns)
+        results = []
+        for i in tqdm(range(len(test_dates) - 1), desc="Incremental backtest"):
+            date = test_dates[i]
+            next_date = test_dates[i + 1]
+            actual_returns = self.returns_data.loc[next_date]
+            for ticker in tickers:
+                quant = self._predict_single_step_quantiles(ticker, date)
+                if quant is None:
+                    continue
+                try:
+                    actual_return = float(actual_returns[ticker])
+                except (KeyError, TypeError):
+                    continue
+                results.append(
+                    {
+                        "date": date,
+                        "next_date": next_date,
+                        "ticker": ticker,
+                        "actual_return": actual_return,
+                        "predicted_mean": quant["predicted_mean"],
+                        "predicted_median": quant["predicted_median"],
+                        "var_5": quant["var_5"],
+                        "var_1": quant["var_1"],
+                        "hit_5": actual_return <= quant["var_5"],
+                        "hit_1": actual_return <= quant["var_1"],
+                    }
+                )
+        return pd.DataFrame(results)
     
     def run_backtest(self, start_date=None, end_date=None, num_stocks=100, dataset=None):
         """Run a backtest of the model."""
@@ -332,8 +467,14 @@ class StockReturnPredictor:
             for ticker in backtest_tickers:
                 if ticker not in self.returns_data.columns:
                     continue
-                forecast = self.forecasts[ticker]['predictions']
-                sample_idx = min(i, forecast.samples.shape[1] - 1)
+                pred_entry = self.forecasts[ticker]["predictions"]
+                if isinstance(pred_entry, list):
+                    if len(pred_entry) == 0:
+                        continue
+                    forecast = pred_entry[min(i, len(pred_entry) - 1)]
+                else:
+                    forecast = pred_entry
+                sample_idx = min(i, max(0, forecast.samples.shape[1] - 1))
                 samples = forecast.samples[:, sample_idx]
                 
                 mean_return = samples.mean()

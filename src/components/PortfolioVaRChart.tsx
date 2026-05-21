@@ -23,6 +23,20 @@ import {
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { Link } from "react-router-dom";
+import ModelBadge from "@/components/legal/ModelBadge";
+import type { ModelLabelKey } from "@/constants/modelLabels";
+
+const VAR_METHOD_LABEL: Partial<Record<string, ModelLabelKey>> = {
+  deepVaR95: "deepVaR",
+  deepVaR99: "deepVaR",
+  parametricVaR95: "parametricVaR",
+  parametricVaR99: "parametricVaR",
+  monteCarloVaR95: "monteCarloVaR",
+  monteCarloVaR99: "monteCarloVaR",
+  blnnVaR95: "blnnVaR",
+  blnnVaR99: "blnnVaR",
+};
 
 interface PortfolioVaRChartProps {
   selectedAssets: string[];
@@ -55,6 +69,7 @@ export default function PortfolioVaRChart({
   const [selectedVaRMethods, setSelectedVaRMethods] = useState<string[]>([
     'parametricVaR95',
     'monteCarloVaR95',
+    'deepVaR95',
     'blnnVaR95',
   ]);
   
@@ -196,9 +211,10 @@ export default function PortfolioVaRChart({
   return (
     <CardGradient className="h-[500px]">
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-lg font-medium">Portfolio Price & VaR Analysis</h3>
-        <TooltipProvider>
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-lg font-medium">Portfolio Price & VaR Analysis</h3>
+            <TooltipProvider>
           <UITooltip>
             <TooltipTrigger asChild>
               <Info className="h-4 w-4 text-muted-foreground cursor-help" />
@@ -208,10 +224,17 @@ export default function PortfolioVaRChart({
               </TooltipContent>
             </UITooltip>
           </TooltipProvider>
+          </div>
+          <p className="text-xs text-slate-500">
+            Model-based estimates only ·{" "}
+            <Link to="/methodology#deepvar" className="text-dashboard-accent underline">
+              Methodology
+            </Link>
+          </p>
         </div>
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <Label htmlFor="period-select" className="text-sm text-muted-foreground">
+            <Label htmlFor="portfolio-period-select" className="text-sm text-muted-foreground">
               Period:
             </Label>
             <Select 
@@ -224,7 +247,7 @@ export default function PortfolioVaRChart({
                 }
               }}
             >
-              <SelectTrigger id="period-select" className="w-[120px]">
+              <SelectTrigger id="portfolio-period-select" className="w-[120px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -261,6 +284,9 @@ export default function PortfolioVaRChart({
                     >
                       {method.name}
                     </Label>
+                    {VAR_METHOD_LABEL[method.key] && (
+                      <ModelBadge kind={VAR_METHOD_LABEL[method.key]!} />
+                    )}
                     <CircleDashed className="h-3 w-3 text-muted-foreground" />
                   </div>
                 </TooltipTrigger>
@@ -271,10 +297,10 @@ export default function PortfolioVaRChart({
                       ? 'Expected to be exceeded 5% of the time (1.25 days per month)'
                       : 'Expected to be exceeded 1% of the time (2.5 days per year)'}
                   </p>
-            </TooltipContent>
-          </UITooltip>
-        </TooltipProvider>
-      </div>
+                </TooltipContent>
+              </UITooltip>
+            </TooltipProvider>
+          </div>
         ))}
       </div>
       

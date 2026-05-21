@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import LimeWordHighlight from "./LimeWordHighlight";
+import ModelBadge from "@/components/legal/ModelBadge";
 import { LimeAnalysis } from "@/services/api";
 
 interface AssetNewsHeadlinesProps {
@@ -30,8 +31,8 @@ export default function AssetNewsHeadlines({ ticker }: AssetNewsHeadlinesProps) 
 
   // Fetch news data from API
   const { data: newsData, isLoading, error } = useQuery({
-    queryKey: ['stock-news', ticker, 10],
-    queryFn: () => apiService.getStockNews(ticker, 10),
+    queryKey: ['stock-news', ticker, 10, 60],
+    queryFn: () => apiService.getStockNews(ticker, 10, 60),
     enabled: !!ticker,
   });
   
@@ -114,18 +115,29 @@ export default function AssetNewsHeadlines({ ticker }: AssetNewsHeadlinesProps) 
   return (
     <>
       <CardGradient>
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-medium">Recent News Headlines</h3>
-          <span className="text-sm text-muted-foreground">{newsItems.length} articles related to {ticker}</span>
+        <div className="flex justify-between items-start mb-4 gap-4">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <h3 className="text-lg font-medium">Recent News Headlines</h3>
+              <ModelBadge kind="newsSentiment" />
+            </div>
+            <p className="text-xs text-slate-500">
+              Headlines from third-party feeds. Sentiment is AI-generated, not investment advice.
+            </p>
+          </div>
+          <span className="text-sm text-muted-foreground shrink-0">
+            {newsItems.length} articles · {ticker}
+          </span>
         </div>
         
         <div className="overflow-hidden rounded-md border border-slate-800">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-slate-800">
-                <TableHead className="w-[60%]">Headline</TableHead>
+                <TableHead className="w-[50%]">Headline</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead className="w-[90px]">Sentiment</TableHead>
                 <TableHead className="w-[100px]">Analysis</TableHead>
               </TableRow>
             </TableHeader>
@@ -145,6 +157,9 @@ export default function AssetNewsHeadlines({ ticker }: AssetNewsHeadlinesProps) 
                           <span className="text-xs text-slate-400">
                             Sentiment: <span className={getSentimentClass(item.sentiment)}>
                               {item.sentiment > 0 ? "Positive" : item.sentiment < 0 ? "Negative" : "Neutral"}
+                            </span>
+                            <span className="ml-1 text-slate-500">
+                              ({typeof item.sentiment === 'number' ? item.sentiment.toFixed(3) : item.sentiment})
                             </span>
                           </span>
                           <a 
@@ -170,6 +185,13 @@ export default function AssetNewsHeadlines({ ticker }: AssetNewsHeadlinesProps) 
                       <CalendarDays className="h-3 w-3 text-slate-400" />
                       <span>{item.date}</span>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    <span className={getSentimentClass(item.sentiment)}>
+                      {typeof item.sentiment === 'number'
+                        ? item.sentiment.toFixed(3)
+                        : String(item.sentiment ?? 0)}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <Button

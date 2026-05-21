@@ -3,8 +3,15 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import AppShell from "./components/layout/AppShell";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import AboutPage from "./pages/legal/AboutPage";
+import MethodologyPage from "./pages/legal/MethodologyPage";
+import DisclaimerPage from "./pages/legal/DisclaimerPage";
+import TermsPage from "./pages/legal/TermsPage";
+import PrivacyPage from "./pages/legal/PrivacyPage";
+import LicensesPage from "./pages/legal/LicensesPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,9 +30,16 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          <Route element={<AppShell />}>
+            <Route path="/" element={<Index />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/methodology" element={<MethodologyPage />} />
+            <Route path="/disclaimer" element={<DisclaimerPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/licenses" element={<LicensesPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

@@ -1,11 +1,11 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional, Any
 import pandas as pd
 import json
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from pathlib import Path
 from scipy import stats
@@ -90,6 +90,8 @@ class ChatRequest(BaseModel):
 price_data = None
 news_data = None
 stock_info = {}
+# Loaded from backend/data/market_caps.json (USD float per CSV ticker)
+market_caps_by_ticker: Dict[str, float] = {}
 # Pre-calculated VaR time-series for all assets (key: ticker, value: dict with rolling_window as key)
 var_timeseries_cache = {}
 # Pre-computed DeepVaR results from DeepAR model: {ticker: {date_str: {deepVaR95, deepVaR99, deepBreach95, deepBreach99}}}
@@ -106,6 +108,9 @@ VAR_API_TIMEOUT = float(os.getenv("VAR_API_TIMEOUT", "5.0"))  # Timeout in secon
 
 # Finnhub configuration (free API key from https://finnhub.io)
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY", "")
+
+# Internal admin: POST /api/admin/reload-data (used by post_start.sh after disk updates)
+INTERNAL_RELOAD_TOKEN = os.getenv("INTERNAL_RELOAD_TOKEN", "").strip()
 
 
 def load_deepvar_results():
@@ -128,17 +133,19 @@ def load_deepvar_results():
         
         for _, row in df.iterrows():
             ticker = row['ticker']
-            date_str = str(row['next_date'])[:10]
-            
-            if ticker not in deepvar_results_cache:
-                deepvar_results_cache[ticker] = {}
-            
-            deepvar_results_cache[ticker][date_str] = {
+            payload = {
                 'deepVaR95': float(row['deepVaR95']),
                 'deepVaR99': float(row['deepVaR99']),
                 'deepBreach95': int(row['deepBreach95']),
                 'deepBreach99': int(row['deepBreach99']),
             }
+            if ticker not in deepvar_results_cache:
+                deepvar_results_cache[ticker] = {}
+            # Index by next_date (chart price date) and origin date for lookups
+            for col in ('next_date', 'date'):
+                if col in row and pd.notna(row[col]):
+                    date_str = str(row[col])[:10]
+                    deepvar_results_cache[ticker][date_str] = payload
         
         n_tickers = len(deepvar_results_cache)
         n_dates = sum(len(dates) for dates in deepvar_results_cache.values())
@@ -933,7 +940,8 @@ def load_data():
         price_data = pd.read_csv(price_file)
         price_data['Date'] = pd.to_datetime(price_data['Date'])
         price_data.set_index('Date', inplace=True)
-        
+        price_data.sort_index(inplace=True)
+
         # Load news data
         with open(news_file, 'r') as f:
             news_data = json.load(f)
@@ -1080,10 +1088,60 @@ def load_data():
                 }
         
         print("Data loaded successfully")
-        
+
+        load_market_caps()
+
     except Exception as e:
         print(f"Error loading data: {e}")
         raise
+
+
+def load_market_caps() -> None:
+    """
+    Load cached market caps from ``data/market_caps.json`` into memory.
+
+    File format (written by data_updater.update_market_caps):
+    ``{"updated_at": "...", "tickers": {"AAPL": {"marketCap": ..., ...}, ...}}``
+    """
+    global market_caps_by_ticker
+    market_caps_by_ticker = {}
+    caps_path = Path(__file__).parent / "data" / "market_caps.json"
+    if not caps_path.exists():
+        print("ℹ️  market_caps.json not found — market caps will show as 0 until updated")
+        return
+    try:
+        with open(caps_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"⚠️  Could not load market_caps.json: {e}")
+        return
+
+    tickers_block = raw.get("tickers") if isinstance(raw, dict) else None
+    if not isinstance(tickers_block, dict):
+        tickers_block = raw if isinstance(raw, dict) else {}
+
+    loaded = 0
+    for key, val in tickers_block.items():
+        if key == "updated_at":
+            continue
+        if not isinstance(val, dict):
+            continue
+        mc = val.get("marketCap")
+        if mc is None:
+            continue
+        try:
+            fval = float(mc)
+        except (TypeError, ValueError):
+            continue
+        if fval > 0:
+            market_caps_by_ticker[key] = fval
+            loaded += 1
+
+    print(
+        f"✅ Market caps loaded: {loaded} tickers "
+        f"(file updated_at={raw.get('updated_at', 'n/a')})"
+    )
+
 
 # Load data on startup
 @app.on_event("startup")
@@ -1126,12 +1184,13 @@ async def get_stocks():
             # Get latest price
             latest_price = price_data[ticker].dropna().iloc[-1] if not price_data[ticker].dropna().empty else 0
             
+            mc = float(market_caps_by_ticker.get(ticker, 0.0))
             stocks.append({
                 "ticker": ticker,
                 "name": info["name"],
                 "sector": info["sector"],
                 "price": float(latest_price),
-                "marketCap": 0  # Would need additional data source
+                "marketCap": mc,
             })
     
     return {"stocks": stocks}
@@ -1163,6 +1222,8 @@ async def get_stock_price_history(
     # Convert to the format expected by frontend
     price_history = []
     ticker_key = f"{ticker}.US"
+    # Also check BRK-B.US for BRK.B (legacy Finnhub format)
+    alt_ticker_key = "BRK-B.US" if ticker == "BRK.B" else None
     for date, price in recent_data.items():
         sentiment = 0.0
         volume = 0
@@ -1170,8 +1231,11 @@ async def get_stock_price_history(
         
         if date_str in news_data:
             stock_news = news_data[date_str]
-            if ticker_key in stock_news:
-                articles = stock_news[ticker_key]
+            news_key = ticker_key if ticker_key in stock_news else (
+                alt_ticker_key if alt_ticker_key and alt_ticker_key in stock_news else None
+            )
+            if news_key:
+                articles = stock_news[news_key]
                 if articles:
                     sentiments = [article.get("sentiment", 0.0) for article in articles]
                     sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
@@ -1192,38 +1256,73 @@ async def get_stock_price_history(
     
     return {"priceHistory": price_history}
 
+def _parse_article_datetime(dt_val: Any) -> Optional[datetime]:
+    """Parse article date from ISO string or epoch; return None if unparseable."""
+    if dt_val is None:
+        return None
+    if isinstance(dt_val, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(dt_val), tz=timezone.utc)
+        except (ValueError, OSError):
+            return None
+    if isinstance(dt_val, str) and dt_val.strip():
+        s = dt_val.strip().replace("Z", "+00:00")
+        try:
+            parsed = datetime.fromisoformat(s)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed
+        except ValueError:
+            try:
+                return datetime.strptime(s[:10], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except ValueError:
+                return None
+    return None
+
+
 @app.get("/api/stocks/{ticker}/news")
 async def get_stock_news(
     ticker: str,
-    limit: int = Query(10, ge=1, le=50, description="Number of news items to retrieve")
+    limit: int = Query(10, ge=1, le=50, description="Number of news items to retrieve"),
+    days: int = Query(60, ge=1, le=365, description="Only include articles from the last N calendar days"),
 ):
-    """Get news headlines for a specific stock"""
+    """Get news headlines for a specific stock (newest first, within the last ``days``)."""
     if news_data is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
-    
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
     news_items = []
-    
-    # Search for news items containing the ticker (keys are "AAPL.US", "BRK.B.US", etc.)
+
+    # Keys are "AAPL.US", "BRK.B.US", etc.
     ticker_key = f"{ticker}.US"
-    for date, stocks_news in news_data.items():
-        if ticker_key in stocks_news:
-            articles = stocks_news[ticker_key]
-            for article in articles:
-                try:
-                    news_items.append({
-                        "title": article["title"],
-                        "source": article.get("publisher", "Unknown"),
-                        "date": article["date"][:10],  # Extract date part
-                        "sentiment": article["sentiment"],
-                        "url": article["link"],
-                        "content": article.get("content", "")  # Include article content
-                    })
-                except KeyError as e:
-                    print(f"Missing key in article: {e}")
-                    continue
-    
-    # Sort by date (newest first) and limit results
-    news_items.sort(key=lambda x: x["date"], reverse=True)
+    alt_ticker_key = f"{ticker.replace('.B', '-B')}.US" if ticker == "BRK.B" else None
+
+    for _bucket_date, stocks_news in news_data.items():
+        key = ticker_key if ticker_key in stocks_news else (
+            alt_ticker_key if alt_ticker_key and alt_ticker_key in stocks_news else None
+        )
+        if not key:
+            continue
+        for article in stocks_news[key]:
+            title = article.get("title")
+            if not title:
+                continue
+            parsed_dt = _parse_article_datetime(article.get("date"))
+            if parsed_dt is None or parsed_dt < cutoff:
+                continue
+            news_items.append({
+                "title": title,
+                "source": article.get("publisher", "Unknown"),
+                "date": parsed_dt.strftime("%Y-%m-%d"),
+                "sort_ts": parsed_dt.timestamp(),
+                "sentiment": float(article.get("sentiment", 0.0)),
+                "url": article.get("link", article.get("url", "")),
+                "content": article.get("content", ""),
+            })
+
+    news_items.sort(key=lambda x: x["sort_ts"], reverse=True)
+    for item in news_items:
+        item.pop("sort_ts", None)
     return {"news": news_items[:limit]}
 
 @app.get("/api/stocks/{ticker}/metrics")
@@ -1510,8 +1609,12 @@ async def get_portfolio_price_history(request: PortfolioPriceHistoryRequest):
                     if date_str in news_data:
                         stock_news = news_data[date_str]
                         ticker_key = f"{ticker}.US"
-                        if ticker_key in stock_news:
-                            articles = stock_news[ticker_key]
+                        alt_ticker_key = "BRK-B.US" if ticker == "BRK.B" else None
+                        news_key = ticker_key if ticker_key in stock_news else (
+                            alt_ticker_key if alt_ticker_key and alt_ticker_key in stock_news else None
+                        )
+                        if news_key:
+                            articles = stock_news[news_key]
                             if articles:
                                 sentiments = [article.get("sentiment", 0.0) for article in articles]
                                 stock_sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
@@ -2063,11 +2166,40 @@ GUIDELINES:
 
 _update_running = False
 
+
+@app.post("/api/admin/reload-data")
+async def admin_reload_data(
+    x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
+):
+    """
+    Reload CSV/JSON from disk into memory and refresh DeepVaR + VaR caches.
+    Secured by INTERNAL_RELOAD_TOKEN (header X-Admin-Token). Used by post_start.sh.
+    """
+    if not INTERNAL_RELOAD_TOKEN:
+        raise HTTPException(
+            status_code=503,
+            detail="INTERNAL_RELOAD_TOKEN is not set; admin reload is disabled",
+        )
+    if x_admin_token != INTERNAL_RELOAD_TOKEN:
+        raise HTTPException(status_code=401, detail="Invalid or missing admin token")
+
+    load_data()
+    load_deepvar_results()
+    global var_timeseries_cache
+    var_timeseries_cache.clear()
+    asyncio.create_task(precalculate_var_timeseries_async())
+
+    return {
+        "status": "success",
+        "message": "Data and DeepVaR reloaded; VaR precalculation started",
+        "timestamp": datetime.now().isoformat(),
+    }
+
 @app.post("/api/data/update")
 async def trigger_data_update(
     prices: bool = Query(True, description="Update price data"),
     news: bool = Query(True, description="Update news data"),
-    days: int = Query(7, description="Days to backfill")
+    days: int = Query(10, description="Days to backfill")
 ):
     """
     Trigger a data update from Finnhub. Requires FINNHUB_API_KEY.
@@ -2116,6 +2248,44 @@ async def trigger_data_update(
         _update_running = False
 
 
+@app.post("/api/data/refresh-sentiment")
+async def trigger_sentiment_refresh():
+    """
+    Re-process all existing news articles with FinBERT to update sentiment scores.
+    Use when sentiment appears as 0 (e.g. articles were saved before FinBERT loaded).
+    """
+    global _update_running
+
+    if _update_running:
+        raise HTTPException(status_code=409, detail="Update already in progress")
+
+    _update_running = True
+    try:
+        from data_updater import refresh_sentiment
+
+        import concurrent.futures
+        loop = asyncio.get_running_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            success = await loop.run_in_executor(pool, refresh_sentiment)
+
+        if not success:
+            raise HTTPException(
+                status_code=500,
+                detail="Sentiment refresh failed — ensure FinBERT is installed"
+            )
+
+        load_data()
+        return {
+            "status": "success",
+            "message": "All news sentiment scores updated with FinBERT",
+            "timestamp": datetime.now().isoformat()
+        }
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"data_updater not found: {e}")
+    finally:
+        _update_running = False
+
+
 @app.get("/api/data/status")
 async def data_status():
     """Check data freshness: latest dates, row counts, staleness."""
@@ -2158,6 +2328,34 @@ async def data_status():
             "total_points": sum(len(d) for d in deepvar_results_cache.values())
         }
 
+    caps_path = Path(__file__).parent / "data" / "market_caps.json"
+    if caps_path.exists():
+        try:
+            with open(caps_path, "r", encoding="utf-8") as f:
+                caps_raw = json.load(f)
+            tb = caps_raw.get("tickers", {})
+            n_file = 0
+            if isinstance(tb, dict):
+                for _k, v in tb.items():
+                    if isinstance(v, dict) and v.get("marketCap"):
+                        n_file += 1
+            n_cols = len(price_data.columns) if price_data is not None else 0
+            cov = (
+                round(100.0 * len(market_caps_by_ticker) / n_cols, 1)
+                if n_cols
+                else None
+            )
+            status["market_caps"] = {
+                "updated_at": caps_raw.get("updated_at"),
+                "tickers_in_file": n_file,
+                "loaded_in_memory": len(market_caps_by_ticker),
+                "coverage_pct": cov,
+            }
+        except (json.JSONDecodeError, OSError, TypeError) as e:
+            status["market_caps"] = {"error": str(e)}
+    else:
+        status["market_caps"] = {"file_present": False}
+
     return status
 
 
@@ -2189,7 +2387,7 @@ async def _daily_update_loop():
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 await loop.run_in_executor(
                     pool,
-                    lambda: _run_update(FINNHUB_API_KEY, prices=True, news=True, days=7)
+                    lambda: _run_update(FINNHUB_API_KEY, prices=True, news=True, days=10)
                 )
 
             load_data()

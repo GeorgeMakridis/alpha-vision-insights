@@ -156,9 +156,10 @@ class ApiService {
   // Get news headlines for a specific stock
   async getStockNews(
     ticker: string,
-    limit: number = 10
+    limit: number = 10,
+    days: number = 60
   ): Promise<{ news: NewsItem[] }> {
-    return this.request(`/api/stocks/${ticker}/news?limit=${limit}`);
+    return this.request(`/api/stocks/${ticker}/news?limit=${limit}&days=${days}`);
   }
 
   // Get risk metrics for a specific stock

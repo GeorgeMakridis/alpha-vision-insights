@@ -30,6 +30,7 @@ dist-ssr
 
 # Data files and directories
 backend/data/
+backend/data_backup_*/
 *.csv
 news_sentiment_*.json
 sp100_*.csv
