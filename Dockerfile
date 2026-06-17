@@ -14,9 +14,13 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Inject VITE_API_URL at build time
+# Inject Vite env at build time (see .env.example)
 ARG VITE_API_URL
+ARG VITE_GITHUB_REPO
+ARG VITE_CONTACT_EMAIL
 ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_GITHUB_REPO=$VITE_GITHUB_REPO
+ENV VITE_CONTACT_EMAIL=$VITE_CONTACT_EMAIL
 
 # Build the application with the correct API URL
 RUN npm run build

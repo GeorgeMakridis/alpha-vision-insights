@@ -56,9 +56,11 @@ export const methodologySections: LegalSection[] = [
   },
   {
     id: "lime",
-    title: "LIME explanations (AI)",
+    title: "XAI explanations (external service)",
     paragraphs: [
-      "Optional word-level highlights for news sentiment via LIME. Explanations are approximate and for exploration only.",
+      "Sentiment scores on headlines come from FinBERT at ingest time.",
+      "The XAI control fetches word-level highlights and narrative insights on demand from an external HTTP service when XAI_API_URL is configured on the backend.",
+      "If the service is unavailable, the UI shows an error rather than illustrative mock data (unless XAI_USE_MOCK=true for local development).",
     ],
   },
   {
@@ -69,6 +71,7 @@ export const methodologySections: LegalSection[] = [
       "Corporate actions, delistings, and symbol changes may cause gaps.",
       "BLNN VaR may show as zero if not connected to an external service.",
       "First load may serve cached metrics until background refresh completes.",
+      "XAI explanations depend on the external provider; they are not FinBERT attributions.",
     ],
   },
 ];

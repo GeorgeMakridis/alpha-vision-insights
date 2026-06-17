@@ -41,6 +41,7 @@ const VAR_METHOD_LABEL: Partial<Record<string, ModelLabelKey>> = {
 interface PortfolioVaRChartProps {
   selectedAssets: string[];
   weights: Record<string, number>;
+  cashWeight?: number;
   days?: number;
   onDaysChange?: (days: number) => void;
 }
@@ -54,7 +55,8 @@ type VaRMethod = {
 
 export default function PortfolioVaRChart({ 
   selectedAssets, 
-  weights, 
+  weights,
+  cashWeight = 0,
   days: initialDays = 60,
   onDaysChange
 }: PortfolioVaRChartProps) {
@@ -83,12 +85,12 @@ export default function PortfolioVaRChart({
 
   // Fetch time-series VaR data for portfolio
   const { data: varTimeSeriesData, isLoading: varTimeSeriesLoading, error: varTimeSeriesError } = useQuery({
-    queryKey: ['portfolio-var-timeseries', selectedAssets, weights, selectedDays, ROLLING_WINDOW],
+    queryKey: ['portfolio-var-timeseries', selectedAssets, weights, cashWeight, selectedDays, ROLLING_WINDOW],
     queryFn: () => {
       if (!selectedAssets || selectedAssets.length === 0 || !weights || Object.keys(weights).length === 0) {
         throw new Error('Portfolio assets and weights are required');
       }
-      return apiService.getPortfolioVarTimeSeries(selectedAssets, weights, selectedDays, ROLLING_WINDOW);
+      return apiService.getPortfolioVarTimeSeries(selectedAssets, weights, selectedDays, ROLLING_WINDOW, cashWeight);
     },
     enabled: selectedAssets.length > 0 && Object.keys(weights).length > 0 && !!selectedDays,
   });

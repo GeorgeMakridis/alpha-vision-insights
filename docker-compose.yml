@@ -19,7 +19,7 @@ services:
       - VAR_ROLLING_WINDOW_DAYS=${VAR_ROLLING_WINDOW_DAYS:-252}
       - DEEPVAR_EPOCHS=${DEEPVAR_EPOCHS:-10}
       - FINNHUB_API_KEY=${FINNHUB_API_KEY:-}
-      - DATA_AUTO_UPDATE=${DATA_AUTO_UPDATE:-false}
+      - DATA_AUTO_UPDATE=${DATA_AUTO_UPDATE:-true}
       - DATA_UPDATE_HOUR=${DATA_UPDATE_HOUR:-6}
       - DATA_REFRESH_SENTIMENT=${DATA_REFRESH_SENTIMENT:-false}
       # Wider backfill for news/prices on startup (e.g. 365). Default 10.
@@ -35,6 +35,12 @@ services:
       - YFINANCE_RETRY_BACKOFF_BASE_SEC=${YFINANCE_RETRY_BACKOFF_BASE_SEC:-3}
       - YFINANCE_RETRY_BACKOFF_MAX_SEC=${YFINANCE_RETRY_BACKOFF_MAX_SEC:-60}
       - YFINANCE_DOWNLOAD_THREADS=${YFINANCE_DOWNLOAD_THREADS:-false}
+      - TZ=${TZ:-Europe/Athens}
+      - XAI_API_URL=${XAI_API_URL:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
+      - XAI_API_PATH=${XAI_API_PATH:-/analyze}
+      - XAI_API_TIMEOUT=${XAI_API_TIMEOUT:-30}
+      - XAI_USE_MOCK=${XAI_USE_MOCK:-true}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -53,6 +59,10 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: http://localhost:8001
+        VITE_GITHUB_REPO: ${VITE_GITHUB_REPO:-https://github.com/GeorgeMakridis/alpha-vision-insights}
+        VITE_CONTACT_EMAIL: ${VITE_CONTACT_EMAIL:-legal@example.com}
+    env_file:
+      - .env
     environment:
       - VITE_API_URL=http://localhost:8001
     ports:

@@ -45,9 +45,9 @@ export const MODEL_LABELS: Record<ModelLabelKey, ModelLabelConfig> = {
     variant: "outline",
   },
   lime: {
-    badge: "AI explanation",
+    badge: "XAI explanation",
     tooltip:
-      "LIME provides a post-hoc explanation of sentiment. It may not reflect the full model reasoning.",
+      "Word-level explanation from an external XAI service when configured; otherwise unavailable or dev mock.",
     variant: "outline",
   },
   chat: {

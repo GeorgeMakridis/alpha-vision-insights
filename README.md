@@ -14,27 +14,98 @@ A comprehensive financial risk analytics platform with real-time data visualizat
 
 ## 🚀 Quick Start (Docker)
 
-### Option 1: Automated Deployment
+### 1. Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose v2)
+- A free [Finnhub API key](https://finnhub.io/dashboard) for news updates
+- Optional: [OpenAI API key](https://platform.openai.com/) for the Risk Analyst chatbot
+- Optional: external XAI HTTP service URL for on-demand headline explanations
+
+### 2. Configure environment
 
 ```bash
-# Deploy the complete stack
-./deploy.sh production
+git clone https://github.com/GeorgeMakridis/alpha-vision-insights.git
+cd alpha-vision-insights
 
-# Or for development with hot reload
-./deploy.sh development
+# Create .env from template (generates INTERNAL_RELOAD_TOKEN if empty)
+chmod +x scripts/setup-env.sh
+./scripts/setup-env.sh
+
+# Edit secrets — required for news:
+#   FINNHUB_API_KEY=your_key
+# Optional:
+#   OPENAI_API_KEY=...          # chatbot
+#   XAI_API_URL=...             # production XAI (then set XAI_USE_MOCK=false)
 ```
 
-### Option 2: Manual Docker Compose
+See [`.env.example`](.env.example) for every variable. **Never commit `.env`** (it is gitignored).
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `FINNHUB_API_KEY` | Yes (news) | Finnhub company news + market cap |
+| `INTERNAL_RELOAD_TOKEN` | Recommended | Reload API memory after disk updates |
+| `DATA_AUTO_UPDATE` | — | `true` = daily in-container news/prices (default) |
+| `DATA_UPDATE_HOUR` | — | Hour for daily run (uses `TZ`, default 6) |
+| `TZ` | — | Timezone (default `Europe/Athens`) |
+| `XAI_API_URL` | For prod XAI | External explainability API |
+| `XAI_USE_MOCK` | Dev only | `true` = mock XAI when URL unset (default in template) |
+| `OPENAI_API_KEY` | Optional | Risk chatbot |
+| `HF_HOME` | Docker | FinBERT model cache under `./backend/data/hf_home` |
+
+### 3. Bootstrap data (first run only)
+
+If `backend/data/` is empty, either copy bundled CSV/JSON into `backend/data/` or let the first boot fetch data:
 
 ```bash
-# Setup backend data
 cd backend && ./setup.sh && cd ..
+```
 
-# Deploy production stack
-docker-compose up --build -d
+### 4. Build and run
 
-# Or development stack
-docker-compose -f docker-compose.dev.yml up --build -d
+```bash
+docker compose up --build -d
+```
+
+Or use the helper script (runs `setup-env.sh` automatically):
+
+```bash
+chmod +x deploy.sh
+./deploy.sh production
+```
+
+**URLs (production compose):**
+
+| Service | URL |
+|---------|-----|
+| Dashboard | http://localhost:8081 |
+| API | http://localhost:8001 |
+| API docs | http://localhost:8001/docs |
+| Health | http://localhost:8001/health |
+| Data meta | http://localhost:8001/api/meta |
+
+### 5. Verify
+
+```bash
+curl -s http://localhost:8001/health
+curl -s http://localhost:8001/api/meta | python3 -m json.tool
+docker compose logs -f alphavision-backend   # post_start: Finnhub + FinBERT + DeepVaR
+```
+
+First boot runs **`post_start.sh`** in the background: price/news update (FinBERT sentiment on new articles), optional DeepVaR, then in-memory reload. The API is healthy within ~2 minutes; DeepVaR first train may take 10–30 minutes on CPU.
+
+### Automated deployment (alternative)
+
+```bash
+./deploy.sh production     # production stack (ports 8081 / 8001)
+./deploy.sh development    # dev stack with hot reload
+./deploy.sh logs
+./deploy.sh stop
+```
+
+### Manual compose (development)
+
+```bash
+docker compose -f docker-compose.dev.yml up --build -d
 ```
 
 ### Fast boot (default)
@@ -55,7 +126,27 @@ Keep `DATA_UPDATER_DAYS` modest on boot (default 10). After the stack is healthy
 docker-compose exec alphavision-backend python /app/data_updater.py --news-only --days 365
 ```
 
-Then reload in-memory data from inside the running backend (inherits container env): `docker compose exec alphavision-backend sh -c 'curl -fsS -X POST -H "X-Admin-Token: $INTERNAL_RELOAD_TOKEN" http://127.0.0.1:8000/api/admin/reload-data'`. If you set a fixed token in `.env`, you can instead call the mapped host port with that same value.
+Then reload in-memory data from inside the running backend:
+
+```bash
+docker compose exec alphavision-backend sh -c \
+  'curl -fsS -X POST -H "X-Admin-Token: $INTERNAL_RELOAD_TOKEN" http://127.0.0.1:8000/api/admin/reload-data'
+```
+
+### Sentiment vs XAI
+
+- **Sentiment scores** — FinBERT in the data updater when Finnhub news is fetched (startup + daily scheduler).
+- **XAI explanations** — on demand when a user opens XAI on a headline; calls `XAI_API_URL` if set, otherwise `XAI_USE_MOCK=true` for local dev.
+
+Replace mock XAI for production:
+
+```bash
+# In .env
+XAI_API_URL=https://your-xai-service.example.com
+XAI_API_KEY=your_key_if_needed
+XAI_USE_MOCK=false
+docker compose up --build -d
+```
 
 ### DeepVaR (automatic in background)
 
@@ -150,12 +241,16 @@ docker-compose logs -f                          # View logs
 
 ## 🌐 Access Points
 
-Once deployed, access the application at:
+Production Docker (`docker-compose.yml`):
+
+- **Dashboard**: http://localhost:8081
+- **API**: http://localhost:8001
+- **API Documentation**: http://localhost:8001/docs
+
+Development Docker (`docker-compose.dev.yml`):
 
 - **Dashboard**: http://localhost:8080
 - **API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
 
 ## 📁 Project Structure
 
@@ -173,23 +268,33 @@ alpha-vision-insights/
 ├── Dockerfile.dev         # Frontend dev container
 ├── docker-compose.yml     # Production stack
 ├── docker-compose.dev.yml # Development stack
-└── deploy.sh             # Deployment script
+├── deploy.sh             # Deployment script
+└── scripts/setup-env.sh  # Create .env from template
 ```
 
 ## 🔍 Monitoring
 
 ### Health Checks
-- Backend: `curl http://localhost:8000/health`
-- Frontend: `curl http://localhost:8080`
+
+Production (8081 / 8001):
+
+```bash
+curl http://localhost:8001/health
+curl http://localhost:8081
+```
+
+Development (8080 / 8000):
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8080
+```
 
 ### Logs
 ```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f alphavision-backend
-docker-compose logs -f alphavision-frontend
+docker compose logs -f
+docker compose logs -f alphavision-backend
+docker compose logs -f alphavision-frontend
 ```
 
 ## 🚨 Troubleshooting
@@ -198,9 +303,8 @@ docker-compose logs -f alphavision-frontend
 
 1. **Port conflicts**
    ```bash
-   # Check what's using the ports
-   lsof -i :8080
-   lsof -i :8000
+   lsof -i :8081 :8001    # production
+   lsof -i :8080 :8000    # development
    ```
 
 2. **Data files missing**
@@ -265,12 +369,39 @@ When you run the app locally or deploy it, users should see:
 
 Copy in `src/content/legal/` is **template text for engineering** — have qualified counsel review before a public launch.
 
-Optional frontend env (see [`.env.example`](.env.example)):
+Optional frontend env (baked at **Docker build** from `.env`; see [`.env.example`](.env.example)):
 
 ```bash
-VITE_GITHUB_REPO=https://github.com/your-org/alpha-vision-insights
+VITE_API_URL=http://localhost:8001
+VITE_GITHUB_REPO=https://github.com/GeorgeMakridis/alpha-vision-insights
 VITE_CONTACT_EMAIL=legal@example.com
 ```
+
+Rebuild the frontend after changing these: `docker compose up --build -d`.
+
+## Ethical assessment
+
+Internal EA tracking (principles, benchmarks, GFT deferrals): [docs/ETHICAL_ASSESSMENT.md](docs/ETHICAL_ASSESSMENT.md).
+
+## Workshop (Cycle 1, Mar 2026)
+
+- [Project update summary (high level)](docs/PROJECT_UPDATE_SUMMARY.md) — what shipped before vs from workshop vs still missing
+- [Workshop roadmap](docs/WORKSHOP_ROADMAP.md) — what is needed for AlphaVision vs future work (AM-only product; no separate data-scientist dashboard)
+- [Why neuromorphic AI is not in production finance today](docs/WHY_NOT_NEUROMORPHIC_IN_PROD.md)
+- [Competitive notes (e.g. Meta TRIBE v2)](docs/COMPETITIVE_NOTES.md)
+
+## Privacy (operators)
+
+Deployment checklist for self-hosted and demo instances: [docs/PRIVACY_DEPLOYMENT.md](docs/PRIVACY_DEPLOYMENT.md).
+
+## Environmental / compute policy
+
+- **Fast boot:** API starts immediately; `backend/post_start.sh` runs data update and incremental DeepVaR in the background, then reloads in-memory data.
+- **Full DeepVaR train:** `python backend/compute_deepvar.py` (CPU-heavy; can take tens of minutes on first run).
+- **Incremental DeepVaR:** When model artifacts exist, post-start extends forecasts from new price dates without full retrain every boot.
+- **Carbon metrics:** Not instrumented in this release; CodeCarbon or similar reporting is planned for a future update.
+
+Dashboard shows **data-as-of** timestamps via `GET /api/meta` (prices, news, Deep VaR).
 
 ## 📄 License
 

@@ -13,12 +13,14 @@ interface RiskChatbotProps {
   selectedAsset?: string;
   portfolioAssets?: string[];
   portfolioWeights?: Record<string, number>;
+  cashWeight?: number;
 }
 
 export default function RiskChatbot({
   selectedAsset,
   portfolioAssets,
   portfolioWeights,
+  cashWeight = 0,
 }: RiskChatbotProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -63,7 +65,8 @@ export default function RiskChatbot({
         selectedAsset,
         portfolioAssets,
         portfolioWeights,
-        history
+        history,
+        cashWeight
       );
 
       setMessages((prev) => [

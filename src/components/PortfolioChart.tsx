@@ -29,12 +29,14 @@ import { Label } from "./ui/label";
 interface PortfolioChartProps {
   selectedAssets: string[];
   weights: Record<string, number>;
+  cashWeight?: number;
   days?: number;
 }
 
 export default function PortfolioChart({ 
   selectedAssets, 
-  weights, 
+  weights,
+  cashWeight = 0,
   days: initialDays = 30 
 }: PortfolioChartProps) {
   const safeDays = initialDays || 30;
@@ -42,8 +44,8 @@ export default function PortfolioChart({
 
   // Fetch portfolio price history from API
   const { data: portfolioData, isLoading } = useQuery({
-    queryKey: ['portfolio-price-history', selectedAssets, weights, selectedDays],
-    queryFn: () => apiService.getPortfolioPriceHistory(selectedAssets, weights, selectedDays),
+    queryKey: ['portfolio-price-history', selectedAssets, weights, cashWeight, selectedDays],
+    queryFn: () => apiService.getPortfolioPriceHistory(selectedAssets, weights, selectedDays, cashWeight),
     enabled: selectedAssets.length > 0 && Object.keys(weights).length > 0,
   });
 

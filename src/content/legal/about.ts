@@ -9,6 +9,7 @@ export const aboutSections: LegalSection[] = [
     title: "What we are",
     list: [
       "A community/educational tool for exploring risk metrics and news context.",
+      "Built for asset managers — quantitative model development and deep technical validation use separate internal dashboards, not a second view inside this app.",
       "Open-source software you can inspect, modify, and self-host.",
       "A research sandbox — not a commercial advisory service.",
     ],
@@ -25,6 +26,13 @@ export const aboutSections: LegalSection[] = [
     title: "Scope",
     paragraphs: [
       "The dashboard covers S&P 100 tickers supported by the bundled data pipeline. Coverage depends on available price and news data.",
+    ],
+  },
+  {
+    title: "Diversity and coverage",
+    paragraphs: [
+      "The universe is large-cap U.S. equities (S&P 100). Results are not representative of all markets, regions, small caps, or asset classes.",
+      "Sentiment and VaR metrics reflect only the public price and news data available to the pipeline—they may under-represent firms with sparse news coverage.",
     ],
   },
   {

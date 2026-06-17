@@ -9,16 +9,18 @@ import { Tooltip, TooltipProvider, TooltipTrigger, TooltipContent } from "@/comp
 interface PortfolioMetricsCardProps {
   selectedAssets: string[];
   weights: Record<string, number>;
+  cashWeight?: number;
 }
 
 export default function PortfolioMetricsCard({
   selectedAssets,
   weights,
+  cashWeight = 0,
 }: PortfolioMetricsCardProps) {
   // Fetch portfolio metrics from API
   const { data: portfolioData, isLoading, error } = useQuery({
-    queryKey: ['portfolio-metrics', selectedAssets, weights],
-    queryFn: () => apiService.getPortfolioMetrics(selectedAssets, weights),
+    queryKey: ['portfolio-metrics', selectedAssets, weights, cashWeight],
+    queryFn: () => apiService.getPortfolioMetrics(selectedAssets, weights, cashWeight),
     enabled: selectedAssets.length > 0 && Object.keys(weights).length > 0,
   });
 

@@ -33,6 +33,8 @@ import pandas as pd
 import numpy as np
 import requests
 
+from article_ids import compute_article_id
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -520,14 +522,22 @@ def update_news(api_key: str, days: int = 3) -> bool:
 
             sentiment = analyze_sentiment(f"{headline}. {summary}" if summary else headline)
 
+            link = article.get("url", "")
+            article_id = compute_article_id(
+                headline,
+                link,
+                a_date,
+            )
+
             obj = {
                 "title": headline,
                 "publisher": article.get("source", "Finnhub"),
                 "content": summary or headline,
-                "link": article.get("url", ""),
+                "link": link,
                 "date": a_dt,
                 "symbols": [ticker_key],
                 "sentiment": sentiment,
+                "article_id": article_id,
             }
 
             if a_date not in existing_news:

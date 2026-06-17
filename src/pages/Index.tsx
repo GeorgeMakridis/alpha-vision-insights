@@ -19,6 +19,16 @@ import { apiService } from "@/services/api";
 import { TAGLINE } from "@/constants/legal";
 import { BarChart, TrendingUp } from "lucide-react";
 
+function weightsMatch(
+  a: Record<string, number>,
+  b: Record<string, number>
+): boolean {
+  const keysA = Object.keys(a).sort();
+  const keysB = Object.keys(b).sort();
+  if (keysA.length !== keysB.length) return false;
+  return keysA.every((k) => Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 1e-6);
+}
+
 const Index = () => {
   // Asset Analysis state
   const [selectedAsset, setSelectedAsset] = useState<string>("AAPL");
@@ -28,8 +38,10 @@ const Index = () => {
   const [selectedPortfolioAssets, setSelectedPortfolioAssets] = useState<string[]>([]);
   const [portfolioWeights, setPortfolioWeights] = useState<Record<string, number>>({});
   const [portfolioDays, setPortfolioDays] = useState<number>(60); // Default period for portfolio charts
-  const [tempWeights, setTempWeights] = useState<Record<string, number>>({}); // Temporary weights before submission
-  const [includeCash, setIncludeCash] = useState<boolean>(false); // Whether to include cash option
+  const [tempWeights, setTempWeights] = useState<Record<string, number>>({});
+  const [includeCash, setIncludeCash] = useState<boolean>(false);
+  const [appliedIncludeCash, setAppliedIncludeCash] = useState<boolean>(false);
+  const [cashWeight, setCashWeight] = useState<number>(0);
   
   // API queries for data fetching
   const { data: stocksData, isLoading: stocksLoading } = useQuery({
@@ -60,13 +72,13 @@ const Index = () => {
     if (!selectedPortfolioAssets.includes(ticker)) {
       const newPortfolioAssets = [...selectedPortfolioAssets, ticker];
       setSelectedPortfolioAssets(newPortfolioAssets);
-      
-      // Redistribute weights equally
+
+      const equalWeight = 1 / newPortfolioAssets.length;
       const newWeights: Record<string, number> = {};
-      newPortfolioAssets.forEach(asset => {
-        newWeights[asset] = 1 / newPortfolioAssets.length;
+      newPortfolioAssets.forEach((asset) => {
+        newWeights[asset] = equalWeight;
       });
-      setPortfolioWeights(newWeights);
+      setTempWeights(newWeights);
     }
   };
   
@@ -78,25 +90,15 @@ const Index = () => {
         const newAssets = [...prev, ticker];
         
         // Update temp weights with equal distribution
-        setTempWeights(prevWeights => {
-          const newWeights = { ...prevWeights };
+        setTempWeights((prevWeights) => {
+          const newWeights: Record<string, number> = {};
           const equalWeight = 1 / newAssets.length;
-          newAssets.forEach(t => {
+          newAssets.forEach((t) => {
             newWeights[t] = equalWeight;
           });
           return newWeights;
         });
-        
-        // Also update applied weights
-        setPortfolioWeights(prevWeights => {
-          const newWeights = { ...prevWeights };
-          const equalWeight = 1 / newAssets.length;
-          newAssets.forEach(t => {
-            newWeights[t] = equalWeight;
-          });
-          return newWeights;
-        });
-        
+
         return newAssets;
       });
     } else {
@@ -105,37 +107,17 @@ const Index = () => {
         const newAssets = prev.filter(t => t !== ticker);
         
         // Update temp weights
-        setTempWeights(prevWeights => {
-          const newWeights = { ...prevWeights };
-          delete newWeights[ticker];
-          
+        setTempWeights((prevWeights) => {
+          const newWeights: Record<string, number> = {};
           if (newAssets.length > 0) {
-            // Redistribute to equal weights
             const equalWeight = 1 / newAssets.length;
-            newAssets.forEach(t => {
+            newAssets.forEach((t) => {
               newWeights[t] = equalWeight;
             });
           }
-          
           return newWeights;
         });
-        
-        // Also update applied weights
-        setPortfolioWeights(prevWeights => {
-          const newWeights = { ...prevWeights };
-          delete newWeights[ticker];
-          
-          if (newAssets.length > 0) {
-            // Redistribute to equal weights
-            const equalWeight = 1 / newAssets.length;
-            newAssets.forEach(t => {
-              newWeights[t] = equalWeight;
-            });
-          }
-          
-          return newWeights;
-        });
-        
+
         return newAssets;
       });
     }
@@ -149,41 +131,69 @@ const Index = () => {
     });
   };
 
-  // Apply weights (normalize and submit)
   const handleApplyWeights = () => {
     const totalAllocated = Object.values(tempWeights).reduce((sum, w) => sum + w, 0);
-    
+
     if (totalAllocated > 1) {
       alert(`Total allocation (${(totalAllocated * 100).toFixed(1)}%) exceeds 100%. Please adjust weights.`);
       return;
     }
 
-    // Normalize weights to sum to 1
-    // If cash is included and total < 1, we normalize assets to their proportion
-    // If cash is not included, we normalize to sum to 1
-    const normalizedWeights: Record<string, number> = {};
-    const assetTotal = totalAllocated;
-    
-    if (assetTotal > 0) {
-      // Normalize asset weights to sum to 1 (cash is handled separately in display)
-      Object.keys(tempWeights).forEach(ticker => {
-        normalizedWeights[ticker] = tempWeights[ticker] / assetTotal;
+    if (includeCash) {
+      const applied: Record<string, number> = {};
+      Object.keys(tempWeights).forEach((ticker) => {
+        applied[ticker] = tempWeights[ticker];
       });
+      setPortfolioWeights(applied);
+      setCashWeight(Math.max(0, 1 - totalAllocated));
+      setAppliedIncludeCash(true);
+      return;
     }
-    
-    setPortfolioWeights(normalizedWeights);
+
+    setAppliedIncludeCash(false);
+    setCashWeight(0);
+
+    if (totalAllocated <= 0) {
+      alert("Please allocate at least some weight to your selected assets.");
+      return;
+    }
+
+    const applied: Record<string, number> = {};
+    if (Math.abs(totalAllocated - 1) < 1e-6) {
+      Object.keys(tempWeights).forEach((ticker) => {
+        applied[ticker] = tempWeights[ticker];
+      });
+    } else {
+      Object.keys(tempWeights).forEach((ticker) => {
+        applied[ticker] = tempWeights[ticker] / totalAllocated;
+      });
+      alert(
+        `Allocated ${(totalAllocated * 100).toFixed(1)}% to equities; scaled to 100% invested for risk metrics.`
+      );
+    }
+    setPortfolioWeights(applied);
   };
 
-  // Reset weights to equal distribution
   const handleResetWeights = () => {
+    if (selectedPortfolioAssets.length === 0) return;
     const equalWeight = 1 / selectedPortfolioAssets.length;
     const newTempWeights: Record<string, number> = {};
-    selectedPortfolioAssets.forEach(ticker => {
+    selectedPortfolioAssets.forEach((ticker) => {
       newTempWeights[ticker] = equalWeight;
     });
     setTempWeights(newTempWeights);
-    setPortfolioWeights(newTempWeights);
   };
+
+  const tempTotal = Object.values(tempWeights).reduce((sum, w) => sum + w, 0);
+  const draftCashWeight = includeCash ? Math.max(0, 1 - tempTotal) : 0;
+  const hasPendingChanges =
+    !weightsMatch(tempWeights, portfolioWeights) ||
+    includeCash !== appliedIncludeCash ||
+    (appliedIncludeCash && Math.abs(cashWeight - draftCashWeight) > 1e-4);
+
+  const pieWeights = hasPendingChanges ? tempWeights : portfolioWeights;
+  const pieCashWeight = hasPendingChanges ? draftCashWeight : cashWeight;
+  const pieIncludeCash = hasPendingChanges ? includeCash : appliedIncludeCash;
 
   return (
     <div className="min-h-screen text-white" style={{ backgroundColor: '#0a0e1a', minHeight: '100vh' }}>
@@ -248,9 +258,9 @@ const Index = () => {
               days={selectedDays}
             />
             
-            <AssetChart ticker={selectedAsset} />
+            <AssetChart ticker={selectedAsset} days={selectedDays} />
             
-            <AssetNewsHeadlines ticker={selectedAsset} />
+            <AssetNewsHeadlines ticker={selectedAsset} days={selectedDays} />
           </TabsContent>
           
           {/* Portfolio Analysis Tab */}
@@ -262,6 +272,7 @@ const Index = () => {
                   weights={portfolioWeights}
                   tempWeights={tempWeights}
                   includeCash={includeCash}
+                  hasPendingChanges={hasPendingChanges}
                   onSelectAsset={handlePortfolioAssetSelect}
                   onWeightChange={handleWeightChange}
                   onIncludeCashChange={setIncludeCash}
@@ -274,11 +285,15 @@ const Index = () => {
                 <PortfolioMetricsCard
                   selectedAssets={selectedPortfolioAssets}
                   weights={portfolioWeights}
+                  cashWeight={cashWeight}
                 />
                 
                 <PortfolioAllocationChart
                   selectedAssets={selectedPortfolioAssets}
-                  weights={portfolioWeights}
+                  weights={pieWeights}
+                  includeCash={pieIncludeCash}
+                  cashWeight={pieCashWeight}
+                  preview={hasPendingChanges}
                 />
               </div>
             </div>
@@ -286,6 +301,7 @@ const Index = () => {
             <PortfolioVaRChart
               selectedAssets={selectedPortfolioAssets}
               weights={portfolioWeights}
+              cashWeight={cashWeight}
               days={portfolioDays}
               onDaysChange={setPortfolioDays}
             />
@@ -293,6 +309,7 @@ const Index = () => {
             <PortfolioChart
               selectedAssets={selectedPortfolioAssets}
               weights={portfolioWeights}
+              cashWeight={cashWeight}
               days={portfolioDays}
             />
           </TabsContent>
@@ -305,6 +322,7 @@ const Index = () => {
         selectedAsset={selectedAsset}
         portfolioAssets={selectedPortfolioAssets}
         portfolioWeights={portfolioWeights}
+        cashWeight={cashWeight}
       />
     </div>
   );

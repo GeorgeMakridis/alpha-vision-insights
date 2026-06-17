@@ -26,6 +26,7 @@ export const privacySections: LegalSection[] = [
       "Finnhub — company news and market data (subject to Finnhub terms).",
       "Yahoo Finance (via yfinance) — historical prices when configured.",
       "Hugging Face — FinBERT model download for sentiment scoring.",
+      "External XAI service (optional) — on-demand word-level explanations when XAI_API_URL is configured.",
       "OpenAI (optional) — risk chatbot responses when OPENAI_API_KEY is configured.",
     ],
   },

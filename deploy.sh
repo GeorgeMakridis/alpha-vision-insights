@@ -98,20 +98,19 @@ deploy_development() {
 
 # Check service health
 check_health() {
-    print_status "Checking service health..."
-    
-    # Wait for services to start
+    local backend_port="${1:-8001}"
+    local frontend_port="${2:-8081}"
+    print_status "Checking service health (backend :${backend_port}, frontend :${frontend_port})..."
+
     sleep 10
-    
-    # Check backend health
-    if curl -f http://localhost:8001/health > /dev/null 2>&1; then
+
+    if curl -f "http://localhost:${backend_port}/health" > /dev/null 2>&1; then
         print_success "Backend is healthy"
     else
         print_warning "Backend health check failed"
     fi
-    
-    # Check frontend health
-    if curl -f http://localhost:8081 > /dev/null 2>&1; then
+
+    if curl -f "http://localhost:${frontend_port}" > /dev/null 2>&1; then
         print_success "Frontend is healthy"
     else
         print_warning "Frontend health check failed"
@@ -144,15 +143,23 @@ main() {
     case "${1:-production}" in
         "production")
             check_docker
+            if [ -f "scripts/setup-env.sh" ]; then
+                bash scripts/setup-env.sh
+            elif [ ! -f ".env" ]; then
+                print_warning ".env missing — copy .env.example to .env and set FINNHUB_API_KEY"
+            fi
             setup_backend
             deploy_production
-            check_health
+            check_health 8001 8081
             ;;
         "development"|"dev")
             check_docker
+            if [ -f "scripts/setup-env.sh" ]; then
+                bash scripts/setup-env.sh
+            fi
             setup_backend
             deploy_development
-            check_health
+            check_health 8000 8080
             ;;
         "logs")
             show_logs
@@ -164,7 +171,11 @@ main() {
             cleanup
             ;;
         "health")
-            check_health
+            if docker compose ps alphavision-backend 2>/dev/null | grep -q '8000->8000'; then
+                check_health 8000 8080
+            else
+                check_health 8001 8081
+            fi
             ;;
         *)
             echo "Usage: $0 [production|development|logs|stop|cleanup|health]"

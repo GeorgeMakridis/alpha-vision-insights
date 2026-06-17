@@ -22,7 +22,8 @@ export interface NewsItem {
   date: string;
   sentiment: number;
   url: string;
-  content?: string; // Add content field
+  content?: string;
+  article_id?: string;
 }
 
 export interface RiskMetrics {
@@ -71,6 +72,20 @@ export interface PortfolioMetrics {
   returns: number;
   volatility: number;
   sharpeRatio: number;
+}
+
+export interface DataMeta {
+  version: string;
+  prices_as_of: string | null;
+  news_as_of: string | null;
+  deepvar_as_of: string | null;
+  deepvar_available: boolean;
+  inference_mode?: string;
+  engines?: string[];
+  neuromorphic_active?: boolean;
+  build_sha?: string | null;
+  xai_api_configured?: boolean;
+  xai_provider?: string | null;
 }
 
 export interface MarketSummary {
@@ -138,6 +153,11 @@ class ApiService {
   // Health check
   async healthCheck(): Promise<{ status: string; timestamp: string }> {
     return this.request('/health');
+  }
+
+  /** Data provenance timestamps (prices, news, Deep VaR). */
+  async getMeta(): Promise<DataMeta> {
+    return this.request('/api/meta');
   }
 
   // Get all available stocks
@@ -211,24 +231,35 @@ class ApiService {
   }
 
   // Get portfolio metrics
-  async getPortfolioMetrics(selectedAssets: string[], weights: Record<string, number>): Promise<MetricsResponse> {
+  async getPortfolioMetrics(
+    selectedAssets: string[],
+    weights: Record<string, number>,
+    cashWeight: number = 0
+  ): Promise<MetricsResponse> {
     return this.request('/api/portfolio/metrics', {
       method: 'POST',
       body: JSON.stringify({
         selected_assets: selectedAssets,
-        weights: weights
+        weights: weights,
+        cash_weight: cashWeight,
       })
     });
   }
 
   // Get portfolio price history
-  async getPortfolioPriceHistory(selectedAssets: string[], weights: Record<string, number>, days: number = 30): Promise<{ priceHistory: any[] }> {
+  async getPortfolioPriceHistory(
+    selectedAssets: string[],
+    weights: Record<string, number>,
+    days: number = 30,
+    cashWeight: number = 0
+  ): Promise<{ priceHistory: any[] }> {
     return this.request('/api/portfolio/price-history', {
       method: 'POST',
       body: JSON.stringify({
         selected_assets: selectedAssets,
         weights: weights,
-        days: days
+        days: days,
+        cash_weight: cashWeight,
       })
     });
   }
@@ -238,7 +269,8 @@ class ApiService {
     selectedAssets: string[], 
     weights: Record<string, number>, 
     days?: number, 
-    rollingWindow?: number
+    rollingWindow?: number,
+    cashWeight: number = 0
   ): Promise<VaRTimeSeriesResponse> {
     return this.request('/api/portfolio/var-timeseries', {
       method: 'POST',
@@ -246,7 +278,8 @@ class ApiService {
         selected_assets: selectedAssets,
         weights: weights,
         days: days,
-        rolling_window: rollingWindow
+        rolling_window: rollingWindow,
+        cash_weight: cashWeight,
       })
     });
   }
@@ -257,8 +290,14 @@ class ApiService {
   }
 
   // Get LIME analysis for a news article
-  async getLimeAnalysis(articleId: string): Promise<LimeAnalysis> {
-    return this.request(`/api/news/${articleId}/lime-analysis`);
+  async getLimeAnalysis(articleId: string, url?: string): Promise<LimeAnalysis> {
+    const params = new URLSearchParams();
+    if (url) {
+      params.set("url", url);
+    }
+    const qs = params.toString();
+    const encodedId = encodeURIComponent(articleId);
+    return this.request(`/api/news/${encodedId}/lime-analysis${qs ? `?${qs}` : ""}`);
   }
 
   // Chat with the Risk Analyst AI
@@ -267,7 +306,8 @@ class ApiService {
     selectedAsset?: string,
     portfolioAssets?: string[],
     portfolioWeights?: Record<string, number>,
-    conversationHistory?: Array<{ role: string; content: string }>
+    conversationHistory?: Array<{ role: string; content: string }>,
+    cashWeight: number = 0
   ): Promise<{ response: string; context_used: any }> {
     return this.request('/api/chat', {
       method: 'POST',
@@ -276,6 +316,7 @@ class ApiService {
         selected_asset: selectedAsset,
         portfolio_assets: portfolioAssets,
         portfolio_weights: portfolioWeights,
+        cash_weight: cashWeight,
         conversation_history: conversationHistory
       })
     });
@@ -310,19 +351,24 @@ export const apiHooks = {
     enabled: !!ticker,
   }),
 
-  usePortfolioMetrics: (selectedAssets: string[], weights: Record<string, number>) => ({
-    queryKey: ['portfolio-metrics', selectedAssets, weights],
-    queryFn: () => apiService.getPortfolioMetrics(selectedAssets, weights),
+  usePortfolioMetrics: (
+    selectedAssets: string[],
+    weights: Record<string, number>,
+    cashWeight: number = 0
+  ) => ({
+    queryKey: ['portfolio-metrics', selectedAssets, weights, cashWeight],
+    queryFn: () => apiService.getPortfolioMetrics(selectedAssets, weights, cashWeight),
     enabled: selectedAssets.length > 0,
   }),
 
   usePortfolioPriceHistory: (
     selectedAssets: string[],
     weights: Record<string, number>,
-    days: number = 30
+    days: number = 30,
+    cashWeight: number = 0
   ) => ({
-    queryKey: ['portfolio-price-history', selectedAssets, weights, days],
-    queryFn: () => apiService.getPortfolioPriceHistory(selectedAssets, weights, days),
+    queryKey: ['portfolio-price-history', selectedAssets, weights, cashWeight, days],
+    queryFn: () => apiService.getPortfolioPriceHistory(selectedAssets, weights, days, cashWeight),
     enabled: selectedAssets.length > 0,
   }),
 

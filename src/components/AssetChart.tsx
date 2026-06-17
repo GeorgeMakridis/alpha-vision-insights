@@ -126,6 +126,9 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
           </div>
           <p className="text-xs text-slate-500">
             Sentiment bars use AI-scored news where available (FinBERT).
+            {chartData.length > 0 && (
+              <> · {chartData.length} daily price observations in period</>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">

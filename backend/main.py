@@ -15,6 +15,9 @@ import requests
 import asyncio
 import httpx
 
+from article_ids import article_storage_id, find_article_in_news_data
+from xai_client import XAIClientError, fetch_xai_explanation, is_xai_configured
+
 # Configuration: Rolling window size for VaR backtesting (default: 252 trading days = 1 year)
 VAR_ROLLING_WINDOW_DAYS = int(os.getenv('VAR_ROLLING_WINDOW_DAYS', '252'))
 
@@ -67,24 +70,54 @@ class PortfolioMetrics(BaseModel):
 class PortfolioRequest(BaseModel):
     selected_assets: List[str]
     weights: Dict[str, float]
+    cash_weight: float = 0.0
 
 class PortfolioPriceHistoryRequest(BaseModel):
     selected_assets: List[str]
     weights: Dict[str, float]
     days: int = 30
+    cash_weight: float = 0.0
 
 class PortfolioVaRTimeSeriesRequest(BaseModel):
     selected_assets: List[str]
     weights: Dict[str, float]
     days: int = None
     rolling_window: int = None
+    cash_weight: float = 0.0
 
 class ChatRequest(BaseModel):
     message: str
     selected_asset: Optional[str] = None
     portfolio_assets: Optional[List[str]] = None
     portfolio_weights: Optional[Dict[str, float]] = None
+    cash_weight: float = 0.0
     conversation_history: Optional[List[Dict[str, str]]] = None
+
+
+def _validate_portfolio_weights(
+    selected_assets: List[str],
+    weights: Dict[str, float],
+    cash_weight: float = 0.0,
+) -> None:
+    """Validate portfolio weights; cash_weight is a zero-return sleeve."""
+    if not selected_assets:
+        raise HTTPException(status_code=400, detail="No assets selected")
+    if len(selected_assets) != len(weights):
+        raise HTTPException(status_code=400, detail="Weights must match selected assets")
+    if cash_weight < 0:
+        raise HTTPException(status_code=400, detail="cash_weight must be non-negative")
+    equity_total = sum(weights.values())
+    total = equity_total + cash_weight
+    if total > 1.0 + 1e-6:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Equity weights ({equity_total:.4f}) plus cash ({cash_weight:.4f}) exceed 100%",
+        )
+    if abs(total - 1.0) > 1e-4:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Equity weights plus cash must sum to 100% (got {total * 100:.2f}%)",
+        )
 
 # Global data storage
 price_data = None
@@ -1166,6 +1199,94 @@ async def root():
         "message": "Use the dashboard at the frontend URL (port 8081). API docs at /docs"
     }
 
+def _build_data_meta() -> Dict[str, Any]:
+    """
+    Provenance timestamps for dashboard transparency (accountability / EA).
+    Returns partial nulls when a dataset is missing; caller may use 503 if prices unloaded.
+    """
+    build_sha = (
+        os.getenv("BUILD_SHA", "").strip()
+        or os.getenv("GIT_COMMIT", "").strip()
+        or None
+    )
+    meta: Dict[str, Any] = {
+        "version": app.version,
+        "prices_as_of": None,
+        "news_as_of": None,
+        "deepvar_as_of": None,
+        "deepvar_available": False,
+        "inference_mode": "classical",
+        "engines": [
+            "parametric_vaR",
+            "monte_carlo_vaR",
+            "deep_ar",
+            "finbert_sentiment",
+        ],
+        "neuromorphic_active": False,
+        "build_sha": build_sha,
+        "xai_api_configured": is_xai_configured(),
+        "xai_provider": "external" if is_xai_configured() else None,
+    }
+
+    if price_data is not None and len(price_data.index) > 0:
+        meta["prices_as_of"] = price_data.index.max().strftime("%Y-%m-%d")
+
+    if news_data is not None:
+        max_news_dt: Optional[datetime] = None
+        for stocks_news in news_data.values():
+            if not isinstance(stocks_news, dict):
+                continue
+            for articles in stocks_news.values():
+                if not isinstance(articles, list):
+                    continue
+                for article in articles:
+                    parsed = _parse_article_datetime(article.get("date"))
+                    if parsed is not None and (
+                        max_news_dt is None or parsed > max_news_dt
+                    ):
+                        max_news_dt = parsed
+        if max_news_dt is not None:
+            meta["news_as_of"] = max_news_dt.strftime("%Y-%m-%d")
+
+    results_file = (
+        Path(__file__).parent / "data" / "deepvar_results" / "deepvar_dashboard.csv"
+    )
+    if deepvar_results_cache:
+        meta["deepvar_available"] = True
+        all_date_keys: List[str] = []
+        for per_ticker in deepvar_results_cache.values():
+            all_date_keys.extend(per_ticker.keys())
+        if all_date_keys:
+            meta["deepvar_as_of"] = max(all_date_keys)[:10]
+    elif results_file.exists():
+        meta["deepvar_available"] = True
+        try:
+            df = pd.read_csv(results_file)
+            date_cols = [c for c in ("next_date", "date") if c in df.columns]
+            if date_cols:
+                combined = pd.concat(
+                    [pd.to_datetime(df[c], errors="coerce") for c in date_cols]
+                )
+                valid = combined.dropna()
+                if len(valid) > 0:
+                    meta["deepvar_as_of"] = valid.max().strftime("%Y-%m-%d")
+        except Exception:
+            pass
+
+    return meta
+
+
+@app.get("/api/meta")
+async def get_data_meta():
+    """
+    Data provenance for the dashboard (prices, news, Deep VaR as-of dates).
+    Returns 503 if core price data has not been loaded yet.
+    """
+    if price_data is None:
+        raise HTTPException(status_code=503, detail="Data not loaded")
+    return _build_data_meta()
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
@@ -1318,6 +1439,7 @@ async def get_stock_news(
                 "sentiment": float(article.get("sentiment", 0.0)),
                 "url": article.get("link", article.get("url", "")),
                 "content": article.get("content", ""),
+                "article_id": article_storage_id(article),
             })
 
     news_items.sort(key=lambda x: x["sort_ts"], reverse=True)
@@ -1511,22 +1633,16 @@ async def get_var_timeseries(
 
 @app.post("/api/portfolio/metrics")
 async def get_portfolio_metrics(request: PortfolioRequest):
-    """Calculate portfolio metrics"""
+    """Calculate portfolio metrics. cash_weight is a zero-return sleeve (dilutes risk)."""
     if price_data is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
     
-    # Extract from request body
     selected_assets = request.selected_assets
     weights = request.weights
+    cash_weight = request.cash_weight
+    _validate_portfolio_weights(selected_assets, weights, cash_weight)
     
-    # Validate inputs
-    if not selected_assets:
-        raise HTTPException(status_code=400, detail="No assets selected")
-    
-    if len(selected_assets) != len(weights):
-        raise HTTPException(status_code=400, detail="Weights must match selected assets")
-    
-    # Calculate portfolio returns
+    # Portfolio return = sum(w_i * r_i); cash contributes 0 (not in loop)
     portfolio_returns = pd.Series(dtype=float)
     
     for ticker, weight in weights.items():
@@ -1564,17 +1680,15 @@ async def get_portfolio_price_history(request: PortfolioPriceHistoryRequest):
     if price_data is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
     
-    # Extract from request body
     selected_assets = request.selected_assets
     weights = request.weights
     days = request.days
+    cash_weight = request.cash_weight
     
-    # Validate days parameter
     if days < 1 or days > 365:
         raise HTTPException(status_code=400, detail="Days must be between 1 and 365")
     
-    if not selected_assets:
-        raise HTTPException(status_code=400, detail="No assets selected")
+    _validate_portfolio_weights(selected_assets, weights, cash_weight)
     
     # Get the last N days of data
     end_date = price_data.index[-1]
@@ -1595,6 +1709,7 @@ async def get_portfolio_price_history(request: PortfolioPriceHistoryRequest):
         date_str = date.strftime("%Y-%m-%d")
         total_weight = 0.0
         
+        # Equity prices only; cash_weight has no price series
         for ticker, weight in weights.items():
             if ticker in period_data.columns:
                 price = period_data.loc[date, ticker]
@@ -1655,18 +1770,13 @@ async def get_portfolio_var_timeseries(request: PortfolioVaRTimeSeriesRequest):
     if price_data is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
     
-    # Extract from request body
     selected_assets = request.selected_assets
     weights = request.weights
     days = request.days
     rolling_window = request.rolling_window
+    cash_weight = request.cash_weight
     
-    # Validate inputs
-    if not selected_assets:
-        raise HTTPException(status_code=400, detail="No assets selected")
-    
-    if len(selected_assets) != len(weights):
-        raise HTTPException(status_code=400, detail="Weights must match selected assets")
+    _validate_portfolio_weights(selected_assets, weights, cash_weight)
     
     # Use configured rolling window size or default
     if rolling_window is None:
@@ -1844,110 +1954,74 @@ async def get_market_summary():
     return summary
 
 @app.get("/api/news/{article_id}/lime-analysis")
-async def get_lime_analysis(article_id: str):
+async def get_lime_analysis(
+    article_id: str,
+    url: Optional[str] = Query(None, description="Optional article URL for lookup fallback"),
+):
     """
-    Get LIME analysis for a specific news article
-    
-    This endpoint would integrate with a FinBERT service to provide:
-    - Word-level sentiment analysis
-    - LIME explanations for each word's contribution
-    - Overall sentiment score
+    Word-level XAI explanation for a news article (on demand).
+
+    Sentiment score comes from FinBERT at ingest time. Explanations are fetched
+    from the external XAI service when XAI_API_URL is configured.
     """
-    # TODO: Integrate with actual FinBERT service
-    # For now, return mock data to demonstrate the interface
-    
-    # Mock article data - in real implementation, this would come from the news service
-    mock_articles = {
-        "article_1": {
-            "title": "Apple Reports Strong Q4 Earnings, Exceeds Expectations",
-            "content": "Apple Inc. reported strong fourth-quarter earnings that exceeded analyst expectations. The company's revenue grew by 8% year-over-year, driven by strong iPhone sales and services growth. CEO Tim Cook highlighted the company's continued innovation and market leadership.",
-            "sentiment": 0.25
-        },
-        "article_2": {
-            "title": "Market Concerns Over Tech Sector Volatility",
-            "content": "Investors are expressing concerns about increased volatility in the technology sector. Recent market fluctuations have raised questions about the sustainability of current valuations. Analysts suggest a more cautious approach to tech investments.",
-            "sentiment": -0.15
-        },
-        "article_3": {
-            "title": "Tesla Announces New Electric Vehicle Models",
-            "content": "Tesla has announced the launch of several new electric vehicle models, including an affordable sedan and an updated SUV. The company expects these new models to significantly boost sales and market share in the competitive EV market.",
-            "sentiment": 0.18
-        }
-    }
-    
-    # Get article data (mock for now)
-    article = mock_articles.get(article_id, {
-        "title": "Sample Financial News Article",
-        "content": "This is a sample financial news article that would be analyzed by the FinBERT model. The LIME analysis would show how each word contributes to the overall sentiment score.",
-        "sentiment": 0.05
-    })
-    
-    # Mock LIME analysis - in real implementation, this would come from FinBERT service
-    def generate_mock_lime_words(content: str, sentiment: float) -> List[Dict[str, Any]]:
-        """Generate mock LIME word analysis based on content and sentiment"""
-        words = content.lower().split()
-        lime_words = []
-        
-        # Define some financial keywords and their typical sentiment values
-        positive_words = ['strong', 'growth', 'positive', 'increase', 'profit', 'success', 'gain', 'up', 'higher']
-        negative_words = ['decline', 'loss', 'negative', 'decrease', 'concern', 'risk', 'down', 'lower', 'weak']
-        neutral_words = ['company', 'market', 'report', 'announce', 'quarter', 'year', 'financial', 'business']
-        
-        for word in words:
-            clean_word = word.strip('.,!?;:')
-            if len(clean_word) < 3:
-                continue
-                
-            lime_value = 0.0
-            importance = 0.3  # Base importance
-            
-            if clean_word in positive_words:
-                lime_value = 0.1 + (sentiment * 0.1)  # Positive contribution
-                importance = 0.7
-            elif clean_word in negative_words:
-                lime_value = -0.1 - (sentiment * 0.1)  # Negative contribution
-                importance = 0.7
-            elif clean_word in neutral_words:
-                lime_value = 0.02  # Slight positive for neutral words
-                importance = 0.4
-            else:
-                # Random small contribution for other words
-                lime_value = (sentiment * 0.05) + (np.random.uniform(-0.02, 0.02))
-                importance = 0.2 + (np.random.uniform(0, 0.3))
-            
-            lime_words.append({
-                "word": clean_word,
-                "limeValue": round(lime_value, 3),
-                "importance": round(importance, 2)
-            })
-        
-        return lime_words
-    
-    lime_words = generate_mock_lime_words(article["content"], article["sentiment"])
-    
-    # Generate AI insights using ChatGPT
-    ai_insights = generate_xai_insights(
-        article["title"], 
-        article["content"], 
-        article["sentiment"], 
-        lime_words
-    )
-    
+    if news_data is None:
+        raise HTTPException(status_code=500, detail="News data not loaded")
+
+    article = find_article_in_news_data(news_data, article_id, url=url)
+    if article is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    title = article.get("title", "")
+    content = article.get("content") or title
+    sentiment = float(article.get("sentiment", 0.0))
+
+    try:
+        xai_result = await fetch_xai_explanation(title, content, sentiment)
+    except XAIClientError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
     return {
-        "title": article["title"],
-        "content": article["content"],
-        "limeWords": lime_words,
-        "overallSentiment": article["sentiment"],
-        "aiInsights": ai_insights
+        "title": title,
+        "content": content,
+        "limeWords": xai_result.get("limeWords", []),
+        "overallSentiment": sentiment,
+        "aiInsights": xai_result.get("aiInsights", ""),
     }
 
-def gather_rag_context(selected_asset: str = None, portfolio_assets: List[str] = None, portfolio_weights: Dict[str, float] = None) -> str:
+
+def gather_rag_context(
+    selected_asset: str = None,
+    portfolio_assets: List[str] = None,
+    portfolio_weights: Dict[str, float] = None,
+    cash_weight: float = 0.0,
+) -> str:
     """
     Gather relevant dashboard data as RAG context for the chatbot.
     Pulls real data from the loaded datasets to ground the LLM responses.
     """
     context_parts = []
-    
+
+    # 0. Data provenance (for traceable "why" answers; does not alter risk calculations)
+    try:
+        prov = _build_data_meta()
+        context_parts.append("=== DATA PROVENANCE ===")
+        context_parts.append(f"API version: {prov.get('version')}")
+        context_parts.append(f"prices_as_of: {prov.get('prices_as_of')}")
+        context_parts.append(f"news_as_of: {prov.get('news_as_of')}")
+        context_parts.append(f"deepvar_as_of: {prov.get('deepvar_as_of')}")
+        context_parts.append(f"deepvar_available: {prov.get('deepvar_available')}")
+        context_parts.append(f"inference_mode: {prov.get('inference_mode')}")
+        context_parts.append(f"neuromorphic_active: {prov.get('neuromorphic_active')}")
+        if prov.get("build_sha"):
+            context_parts.append(f"build_sha: {prov.get('build_sha')}")
+        context_parts.append(
+            "Engines in use: parametric VaR, Monte Carlo VaR, DeepAR (Deep VaR), "
+            "FinBERT sentiment (classical stack only)."
+        )
+        context_parts.append("")
+    except Exception:
+        pass
+
     # 1. Market overview
     if price_data is not None:
         latest_prices = price_data.iloc[-1].dropna()
@@ -2036,6 +2110,10 @@ def gather_rag_context(selected_asset: str = None, portfolio_assets: List[str] =
             info = stock_info.get(ticker, {})
             price = price_data[ticker].dropna().iloc[-1] if ticker in price_data.columns else 0
             context_parts.append(f"  - {ticker} ({info.get('name', ticker)}): weight={weight*100:.1f}%, price=${price:.2f}, sector={info.get('sector', 'Unknown')}")
+        if cash_weight > 0:
+            context_parts.append(
+                f"  - Cash: weight={cash_weight * 100:.1f}% (zero return sleeve, dilutes portfolio risk)"
+            )
         
         # Portfolio-level metrics
         valid_tickers = [t for t in portfolio_assets if t in price_data.columns]
@@ -2086,7 +2164,8 @@ async def chat_endpoint(request: ChatRequest):
     rag_context = gather_rag_context(
         selected_asset=request.selected_asset,
         portfolio_assets=request.portfolio_assets,
-        portfolio_weights=request.portfolio_weights
+        portfolio_weights=request.portfolio_weights,
+        cash_weight=request.cash_weight,
     )
     
     system_prompt = f"""You are AlphaVision Risk Analyst, an expert AI assistant specializing in financial risk analysis for the S&P 100 universe. You have access to real dashboard data shown below.
@@ -2109,6 +2188,10 @@ GUIDELINES:
 - Use financial terminology accurately but explain it when needed
 - Format responses concisely—use brief paragraphs, not long bullet lists
 - When relevant, suggest what the user could explore further on the dashboard
+- When stating freshness or levels, cite prices_as_of and news_as_of from DATA PROVENANCE
+- When explaining VaR or sentiment, reference specific numbers from CURRENT DASHBOARD DATA and label the model class (statistical vs ML estimate)
+- Do not claim neuromorphic, BCPNN, or SNN outputs — inference_mode is classical only
+- Educational context only; do not provide personalized rebalancing or investment recommendations
 """
 
     # Build conversation messages
