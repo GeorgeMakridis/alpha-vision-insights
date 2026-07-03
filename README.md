@@ -50,6 +50,7 @@ See [`.env.example`](.env.example) for every variable. **Never commit `.env`** (
 | `XAI_API_URL` | For prod XAI | External explainability API |
 | `XAI_USE_MOCK` | Dev only | `true` = mock XAI when URL unset (default in template) |
 | `OPENAI_API_KEY` | Optional | Risk chatbot |
+| `CORS_ORIGINS` | Cross-origin only | Comma-separated frontend HTTPS origins |
 | `HF_HOME` | Docker | FinBERT model cache under `./backend/data/hf_home` |
 
 ### 3. Bootstrap data (first run only)
@@ -334,7 +335,7 @@ docker compose logs -f alphavision-frontend
 
 ## 🔐 Security
 
-- CORS configured for frontend domains
+- CORS: set `CORS_ORIGINS` in `.env` when the API is on a different origin than the UI (not needed for same-domain reverse-proxy deploy; see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md))
 - Input validation on all endpoints
 - Proper error handling
 - Health checks for monitoring
@@ -377,7 +378,9 @@ VITE_GITHUB_REPO=https://github.com/GeorgeMakridis/alpha-vision-insights
 VITE_CONTACT_EMAIL=legal@example.com
 ```
 
-Rebuild the frontend after changing these: `docker compose up --build -d`.
+Rebuild the frontend after changing these: `docker compose build --no-cache alphavision-frontend && docker compose up -d`.
+
+**Production HTTPS:** see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — set `VITE_API_URL` to your public HTTPS URL and put a reverse proxy in front (do not use Docker service names in `VITE_API_URL`).
 
 ## Ethical assessment
 

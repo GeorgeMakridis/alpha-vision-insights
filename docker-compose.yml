@@ -41,6 +41,8 @@ services:
       - XAI_API_PATH=${XAI_API_PATH:-/analyze}
       - XAI_API_TIMEOUT=${XAI_API_TIMEOUT:-30}
       - XAI_USE_MOCK=${XAI_USE_MOCK:-true}
+      # Comma-separated browser origins when API is on a different domain than the UI
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -58,13 +60,13 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: http://localhost:8001
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
         VITE_GITHUB_REPO: ${VITE_GITHUB_REPO:-https://github.com/GeorgeMakridis/alpha-vision-insights}
         VITE_CONTACT_EMAIL: ${VITE_CONTACT_EMAIL:-legal@example.com}
     env_file:
       - .env
     environment:
-      - VITE_API_URL=http://localhost:8001
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8001}
     ports:
       - "8081:8080"
     extra_hosts:

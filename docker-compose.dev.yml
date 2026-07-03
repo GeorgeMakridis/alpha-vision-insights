@@ -28,6 +28,7 @@ services:
       - XAI_API_PATH=${XAI_API_PATH:-/analyze}
       - XAI_API_TIMEOUT=${XAI_API_TIMEOUT:-30}
       - XAI_USE_MOCK=${XAI_USE_MOCK:-true}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     restart: unless-stopped
     command: ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
     networks:
@@ -46,7 +47,7 @@ services:
       - .:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
       - VITE_GITHUB_REPO=${VITE_GITHUB_REPO:-https://github.com/GeorgeMakridis/alpha-vision-insights}
       - VITE_CONTACT_EMAIL=${VITE_CONTACT_EMAIL:-legal@example.com}
     depends_on:
