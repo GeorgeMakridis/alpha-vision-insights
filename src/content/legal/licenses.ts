@@ -22,6 +22,7 @@ export const licensesSections: LegalSection[] = [
       "Finnhub API — market data and news; requires API key; subject to Finnhub terms.",
       "Yahoo Finance (yfinance) — price data; subject to Yahoo terms of use.",
       "OpenAI API (optional) — chat feature; subject to OpenAI usage policies.",
+      "Umami / Plausible (optional) — privacy-friendly visitor analytics when configured.",
     ],
   },
   {

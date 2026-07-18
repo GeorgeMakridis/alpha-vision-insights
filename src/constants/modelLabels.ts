@@ -53,7 +53,7 @@ export const MODEL_LABELS: Record<ModelLabelKey, ModelLabelConfig> = {
   chat: {
     badge: "AI assistant",
     tooltip:
-      "Generative AI assistant for educational context only. Not investment advice. May be inaccurate.",
+      "OpenAI-powered assistant for educational context only. Do not share private data. Not investment advice.",
     variant: "outline",
   },
   marketData: {

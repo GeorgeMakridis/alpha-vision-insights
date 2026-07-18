@@ -13,6 +13,8 @@ import TermsPage from "./pages/legal/TermsPage";
 import PrivacyPage from "./pages/legal/PrivacyPage";
 import LicensesPage from "./pages/legal/LicensesPage";
 
+import VisitorAnalytics from "./components/analytics/VisitorAnalytics";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -26,6 +28,7 @@ const queryClient = new QueryClient({
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
+      <VisitorAnalytics />
       <Toaster />
       <Sonner />
       <BrowserRouter>

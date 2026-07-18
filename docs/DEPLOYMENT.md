@@ -26,7 +26,7 @@ Serve the UI and API on one HTTPS origin. The browser calls `https://your-domain
 
 ```bash
 VITE_API_URL=https://your-domain.example.com
-VITE_CONTACT_EMAIL=you@example.com
+VITE_CONTACT_EMAIL=george.makridis@expertai-lux.com
 FINNHUB_API_KEY=...
 # CORS_ORIGINS=   # leave empty for same-origin
 ```

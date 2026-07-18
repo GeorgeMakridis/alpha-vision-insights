@@ -5,17 +5,19 @@ Use this checklist when self-hosting or operating a public demo of AlphaVision I
 ## Before go-live
 
 - [ ] **Environment file** — Run `./scripts/setup-env.sh` (or `cp .env.example .env`) and set secrets; see [README](../README.md#2-configure-environment).
-- [ ] **Data controller identified** — You (self-host) or your organization (public demo), not the open-source repo maintainers by default.
-- [ ] **Contact email set** — `VITE_CONTACT_EMAIL` in `.env` (baked into frontend at Docker build) for Privacy / legal links.
+- [ ] **Data controller identified** — Self-host: you are the controller. Public Extra Brain / UNP demo: privacy contact `george.makridis@expertai-lux.com`; host operator remains responsible for the server.
+- [ ] **Contact email set** — `VITE_CONTACT_EMAIL=george.makridis@expertai-lux.com` (baked into frontend at Docker build) for Privacy / legal links. Rebuild frontend after changing.
 - [ ] **Secrets not in git** — `.env` contains API keys only on the server; never commit `.env`.
 
-## Chat (OpenAI or compatible LLM)
+## Chat (OpenAI) — short ethical / legal check
 
-- [ ] **`OPENAI_API_KEY`** — Only set if chat is required; disable by omitting the key if chat should be unavailable.
-- [ ] **No PII in prompts** — UI warns users; operator policy forbids account numbers, national IDs, etc.
-- [ ] **Message logging** — Document whether chat requests/responses are logged on your server (default: not long-term stored by app code; verify your deployment).
-- [ ] **Retention** — Define how long logs are kept if logging is enabled.
-- [ ] **Sub-processor** — OpenAI (or chosen provider) DPA / terms reviewed if EU/UK users access the instance.
+- [ ] **LLM provider** — This deployment uses **OpenAI** (`api.openai.com`) when `OPENAI_API_KEY` is set. Confirm that matches your DPA / sub-processor list.
+- [ ] **`OPENAI_API_KEY`** — Only set if chat is required; omit the key to disable chat entirely.
+- [ ] **No private / personal data in prompts** — UI and `/privacy` warn users; operator policy forbids passwords, account numbers, national IDs, customer PII.
+- [ ] **Storage** — AlphaVision app code does **not** persist chat transcripts by default. OpenAI processes each request under OpenAI’s terms. Document any extra logging you enable (proxy, APM).
+- [ ] **Retention** — Define how long reverse-proxy / access logs are kept (e.g. 30–90 days).
+- [ ] **Sub-processor** — OpenAI DPA / terms reviewed if EU/UK users access the instance.
+- [ ] **TLS** — HTTPS for the public demo (frontend and API via reverse proxy).
 
 ## Server and network
 
@@ -27,7 +29,8 @@ Use this checklist when self-hosting or operating a public demo of AlphaVision I
 ## Browser / client
 
 - [ ] **localStorage** — Disclaimer acknowledgment flag (`disclaimer_ack_v1`); no account data by default.
-- [ ] **Cookies** — None required for core dashboard; add cookie banner only if analytics cookies are introduced later.
+- [ ] **Cookies** — None required for core dashboard; Umami/Plausible defaults are cookieless. Add a cookie banner only if you introduce cookie-based analytics later.
+- [ ] **Visitor analytics (optional)** — Prefer Umami Cloud ([docs/ANALYTICS.md](./ANALYTICS.md)); set `VITE_ANALYTICS_*` and rebuild frontend. Disclose in `/privacy`.
 
 ## Third-party data and models
 
@@ -47,6 +50,7 @@ Use this checklist when self-hosting or operating a public demo of AlphaVision I
 - [ ] Re-run this checklist after enabling chat, analytics, or auth.
 - [ ] Re-read `/privacy` after material feature changes.
 - [ ] Have qualified counsel review template legal copy before a regulated or commercial launch.
+- [ ] Treat the chatbot as requiring a short ethical/legal check before external demo review (provider, storage, controller, safeguards).
 
 ## References
 

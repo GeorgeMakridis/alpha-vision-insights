@@ -369,8 +369,8 @@ export default function RiskChatbot({
               </button>
             </div>
             <p className="text-[10px] text-slate-500 text-center mt-1.5 leading-relaxed px-1">
-              Do not share personal or account information. Messages may be processed by a
-              third-party LLM.{" "}
+              Do not share private, personal, or account information. Messages are sent to
+              OpenAI for processing and are not stored by this app.{" "}
               <Link to="/privacy" className="text-dashboard-accent underline">
                 Privacy
               </Link>

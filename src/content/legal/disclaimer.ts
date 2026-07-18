@@ -61,7 +61,7 @@ export const disclaimerSections: LegalSection[] = [
     title: "Your responsibility",
     paragraphs: [
       "You are solely responsible for how you use this tool and for verifying any information before acting on it.",
-      "Do not enter passwords, account numbers, or other sensitive personal data into the chatbot or other features.",
+      "Do not enter passwords, account numbers, national IDs, or other private or sensitive personal data into the chatbot or other features. Chat messages (when enabled) are processed by OpenAI and are not stored long-term by this application.",
     ],
   },
 ];

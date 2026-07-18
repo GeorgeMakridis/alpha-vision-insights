@@ -49,7 +49,7 @@ services:
     environment:
       - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
       - VITE_GITHUB_REPO=${VITE_GITHUB_REPO:-https://github.com/GeorgeMakridis/alpha-vision-insights}
-      - VITE_CONTACT_EMAIL=${VITE_CONTACT_EMAIL:-legal@example.com}
+      - VITE_CONTACT_EMAIL=${VITE_CONTACT_EMAIL:-george.makridis@expertai-lux.com}
     depends_on:
       - alphavision-backend
     restart: unless-stopped

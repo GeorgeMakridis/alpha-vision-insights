@@ -86,6 +86,8 @@ export interface DataMeta {
   build_sha?: string | null;
   xai_api_configured?: boolean;
   xai_provider?: string | null;
+  chat_configured?: boolean;
+  llm_provider?: string | null;
 }
 
 export interface MarketSummary {

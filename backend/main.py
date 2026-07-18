@@ -1242,6 +1242,8 @@ def _build_data_meta() -> Dict[str, Any]:
         "build_sha": build_sha,
         "xai_api_configured": is_xai_configured(),
         "xai_provider": "external" if is_xai_configured() else None,
+        "chat_configured": bool(OPENAI_API_KEY),
+        "llm_provider": "openai" if OPENAI_API_KEY else None,
     }
 
     if price_data is not None and len(price_data.index) > 0:

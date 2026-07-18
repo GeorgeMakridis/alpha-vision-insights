@@ -50,8 +50,8 @@ export const methodologySections: LegalSection[] = [
     id: "chat",
     title: "Risk chatbot (AI assistant)",
     paragraphs: [
-      "Optional feature using an OpenAI-compatible API. Context includes selected ticker, portfolio weights, and data dates from the backend.",
-      "Responses are generative and educational only — not personalized investment advice.",
+      "Optional feature using OpenAI’s Chat Completions API when OPENAI_API_KEY is set. Context includes selected ticker, portfolio weights, and data dates from the backend — not private personal data.",
+      "Do not paste passwords, account numbers, or other private information into chat. Responses are generative and educational only — not personalized investment advice.",
     ],
   },
   {

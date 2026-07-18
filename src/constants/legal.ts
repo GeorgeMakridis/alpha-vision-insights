@@ -8,10 +8,10 @@ export const GLOBAL_DISCLAIMER_ONE_LINER =
 
 export const ACK_STORAGE_KEY = "disclaimer_ack_v1";
 
-export const LEGAL_LAST_UPDATED = "2026-05-21";
+export const LEGAL_LAST_UPDATED = "2026-07-18";
 
 export const CONTACT_EMAIL =
-  import.meta.env.VITE_CONTACT_EMAIL ?? "legal@example.com";
+  import.meta.env.VITE_CONTACT_EMAIL ?? "george.makridis@expertai-lux.com";
 
 export const GITHUB_REPO_URL =
   import.meta.env.VITE_GITHUB_REPO ?? "#";

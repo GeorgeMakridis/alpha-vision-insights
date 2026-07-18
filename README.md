@@ -375,12 +375,12 @@ Optional frontend env (baked at **Docker build** from `.env`; see [`.env.example
 ```bash
 VITE_API_URL=http://localhost:8001
 VITE_GITHUB_REPO=https://github.com/GeorgeMakridis/alpha-vision-insights
-VITE_CONTACT_EMAIL=legal@example.com
+VITE_CONTACT_EMAIL=george.makridis@expertai-lux.com
 ```
 
 Rebuild the frontend after changing these: `docker compose build --no-cache alphavision-frontend && docker compose up -d`.
 
-**Production HTTPS:** see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — set `VITE_API_URL` to your public HTTPS URL and put a reverse proxy in front (do not use Docker service names in `VITE_API_URL`).
+**Production HTTPS:** see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) — set `VITE_API_URL` to your public HTTPS URL and put a reverse proxy in front (do not use Docker service names in `VITE_API_URL`). For the Extra Brain demo, also set `VITE_CONTACT_EMAIL` and rebuild so `/privacy` shows the correct contact.
 
 ## Ethical assessment
 
@@ -396,6 +396,8 @@ Internal EA tracking (principles, benchmarks, GFT deferrals): [docs/ETHICAL_ASSE
 ## Privacy (operators)
 
 Deployment checklist for self-hosted and demo instances: [docs/PRIVACY_DEPLOYMENT.md](docs/PRIVACY_DEPLOYMENT.md).
+
+Optional visitor counts (Umami Cloud — no extra pods): [docs/ANALYTICS.md](docs/ANALYTICS.md).
 
 ## Environmental / compute policy
 
