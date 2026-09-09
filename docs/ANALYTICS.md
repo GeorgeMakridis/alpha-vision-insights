@@ -1,39 +1,26 @@
 # Visitor analytics (Umami / Plausible)
 
-Optional, privacy-friendly page-view tracking. **Off by default.** No new Kubernetes services for Miguel if you use a cloud plan.
+Privacy-friendly page-view tracking. **Umami Cloud is enabled by default** for the Extra Brain / UNP demo (website ID baked into the frontend).
 
-## Recommended: Umami Cloud (lowest effort)
+## Defaults in the repo
 
-**You (George) — one-time setup (~5 min)**
+| Variable | Default |
+|----------|---------|
+| `VITE_ANALYTICS_PROVIDER` | `umami` |
+| `VITE_ANALYTICS_SCRIPT_URL` | `https://cloud.umami.is/script.js` |
+| `VITE_ANALYTICS_WEBSITE_ID` | `f6455d9b-acb4-40d7-9aa4-b880867e7ed8` |
 
-1. Sign up at [https://cloud.umami.is](https://cloud.umami.is) (free tier is enough for a demo).
-2. Add a website with domain: `alphavision.extra-brain.unparallel.pt`
-3. Copy the **Website ID** (UUID) and note the script URL (usually `https://cloud.umami.is/script.js`).
+Miguel only needs to **pull + rebuild the frontend** — no extra env required for Umami.
 
-**Miguel — only env + frontend rebuild**
+To disable: set `VITE_ANALYTICS_PROVIDER=off` at frontend build time.
 
-Add to the frontend build env (same place as `VITE_API_URL` / `VITE_CONTACT_EMAIL`):
+## What Miguel does *not* need
 
-```bash
-VITE_ANALYTICS_PROVIDER=umami
-VITE_ANALYTICS_SCRIPT_URL=https://cloud.umami.is/script.js
-VITE_ANALYTICS_WEBSITE_ID=<paste-uuid-from-umami>
-```
-
-Rebuild **only** the frontend image (no backend change, no PVC, no new pods):
-
-```bash
-docker compose build --no-cache alphavision-frontend
-docker compose up -d alphavision-frontend
-```
-
-(or the equivalent K8s image rebuild with those build args)
-
-Then open the live site once and confirm a hit appears in the Umami dashboard.
+- No Umami/Plausible container in the cluster  
+- No database for analytics  
+- No Ingress changes (script loads from `cloud.umami.is` in the browser)  
 
 ## Alternative: Plausible Cloud
-
-Plausible is paid SaaS. Same pattern for Miguel (env + rebuild only):
 
 ```bash
 VITE_ANALYTICS_PROVIDER=plausible
@@ -41,17 +28,6 @@ VITE_ANALYTICS_SCRIPT_URL=https://plausible.io/js/script.js
 VITE_ANALYTICS_DOMAIN=alphavision.extra-brain.unparallel.pt
 ```
 
-## What Miguel does *not* need
-
-- No Umami/Plausible container in the cluster  
-- No database for analytics  
-- No Ingress changes (script loads from `cloud.umami.is` / `plausible.io` in the browser)  
-- No cookie consent banner for default Umami/Plausible cookieless mode (still disclose in `/privacy` — already updated)
-
-## Local development
-
-Leave `VITE_ANALYTICS_*` empty — the script never loads.
-
 ## Privacy
 
-See `/privacy` and [PRIVACY_DEPLOYMENT.md](./PRIVACY_DEPLOYMENT.md). Tell Gabriela that analytics (if enabled) is Umami/Plausible cookieless page views only.
+See `/privacy` and [PRIVACY_DEPLOYMENT.md](./PRIVACY_DEPLOYMENT.md). Umami is cookieless by default (page views / unique visitors for the research demo).

@@ -34,7 +34,7 @@ export const privacySections: LegalSection[] = [
     title: "Visitor analytics (optional)",
     paragraphs: [
       "If the operator enables analytics, this deployment may use Umami or Plausible (cookieless by default) to count page views and unique visitors for the research demo.",
-      "No advertising profiles are built. Analytics can be disabled by omitting the VITE_ANALYTICS_* build variables.",
+      "No advertising profiles are built. Analytics can be disabled by setting VITE_ANALYTICS_PROVIDER=off at frontend build time.",
     ],
   },
   {

@@ -63,9 +63,9 @@ services:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8001}
         VITE_GITHUB_REPO: ${VITE_GITHUB_REPO:-https://github.com/GeorgeMakridis/alpha-vision-insights}
         VITE_CONTACT_EMAIL: ${VITE_CONTACT_EMAIL:-george.makridis@expertai-lux.com}
-        VITE_ANALYTICS_PROVIDER: ${VITE_ANALYTICS_PROVIDER:-}
-        VITE_ANALYTICS_SCRIPT_URL: ${VITE_ANALYTICS_SCRIPT_URL:-}
-        VITE_ANALYTICS_WEBSITE_ID: ${VITE_ANALYTICS_WEBSITE_ID:-}
+        VITE_ANALYTICS_PROVIDER: ${VITE_ANALYTICS_PROVIDER:-umami}
+        VITE_ANALYTICS_SCRIPT_URL: ${VITE_ANALYTICS_SCRIPT_URL:-https://cloud.umami.is/script.js}
+        VITE_ANALYTICS_WEBSITE_ID: ${VITE_ANALYTICS_WEBSITE_ID:-f6455d9b-acb4-40d7-9aa4-b880867e7ed8}
         VITE_ANALYTICS_DOMAIN: ${VITE_ANALYTICS_DOMAIN:-}
     env_file:
       - .env
