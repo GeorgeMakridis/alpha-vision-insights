@@ -50,6 +50,12 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
     enabled: !!safeTicker && !!selectedDays,
   });
 
+  const { data: meta } = useQuery({
+    queryKey: ["meta"],
+    queryFn: () => apiService.getMeta(),
+    staleTime: 60_000,
+  });
+
   useEffect(() => {
     if (priceHistoryData?.priceHistory) {
       setChartData(priceHistoryData.priceHistory);
@@ -57,6 +63,10 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
       setChartData([]);
     }
   }, [priceHistoryData]);
+
+  const hasUc2Line = chartData.some(
+    (d) => d.sentimentFl !== undefined && d.sentimentFl !== null && !Number.isNaN(Number(d.sentimentFl))
+  );
 
   if (isLoading) {
     return (
@@ -90,9 +100,20 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
       case "Price":
         return [`$${value.toFixed(2)}`, "Asset Price"];
       case "Sentiment":
+      case "FinBERT sentiment": {
         const sentiment = value >= 0.5 ? "Bullish" : value >= 0 ? "Slightly Bullish" : 
                            value >= -0.5 ? "Slightly Bearish" : "Bearish";
-        return [`${value.toFixed(2)} (${sentiment})`, "Market Sentiment"];
+        return [`${value.toFixed(2)} (${sentiment})`, "FinBERT sentiment"];
+      }
+      case "FL BCPNN sentiment": {
+        if (value === null || value === undefined || Number.isNaN(Number(value))) {
+          return ["—", "FL BCPNN sentiment"];
+        }
+        const fl = Number(value);
+        const sentiment = fl >= 0.5 ? "Bullish" : fl >= 0 ? "Slightly Bullish" : 
+                           fl >= -0.5 ? "Slightly Bearish" : "Bearish";
+        return [`${fl.toFixed(2)} (${sentiment})`, "FL BCPNN sentiment"];
+      }
       case "News Volume":
         return [value.toFixed(2), "News Articles"];
       default:
@@ -108,6 +129,9 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
             <h3 className="text-lg font-medium">Price & Market Sentiment</h3>
             <ModelBadge kind="marketData" />
             <ModelBadge kind="newsSentiment" />
+            {(hasUc2Line || meta?.uc2_sentiment_available) && (
+              <ModelBadge kind="uc2Sentiment" />
+            )}
             <TooltipProvider>
             <UITooltip>
               <TooltipTrigger asChild>
@@ -117,7 +141,10 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
                 <p className="font-medium mb-1">Chart Guide</p>
                 <ul className="list-disc list-inside space-y-1 text-xs">
                   <li><span className="text-[#8B5CF6] font-medium">Price</span>: Asset price trajectory</li>
-                  <li><span className="text-[#22D3EE] font-medium">Sentiment</span>: Market sentiment (-1 to 1)</li>
+                  <li><span className="text-[#22D3EE] font-medium">FinBERT</span>: Primary sentiment (−1 to 1)</li>
+                  {hasUc2Line && (
+                    <li><span className="text-[#F59E0B] font-medium">FL BCPNN</span>: Federated UC2 sentiment (−1 to 1)</li>
+                  )}
                   <li><span className="text-[#10B981] font-medium">Volume</span>: News activity level</li>
                 </ul>
               </TooltipContent>
@@ -125,7 +152,10 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
           </TooltipProvider>
           </div>
           <p className="text-xs text-slate-500">
-            Sentiment bars use AI-scored news where available (FinBERT).
+            Primary sentiment from FinBERT
+            {hasUc2Line
+              ? "; amber line is UC2 federated BCPNN sentiment (optional)."
+              : "."}
             {chartData.length > 0 && (
               <> · {chartData.length} daily price observations in period</>
             )}
@@ -262,7 +292,10 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
               formatter={(value) => {
                 if (value === "Price") return "Price";
                 if (value === "News Volume") return "News Articles";
-                if (value === "Sentiment") return "Market Sentiment";
+                if (value === "FinBERT sentiment" || value === "Sentiment") {
+                  return "FinBERT sentiment";
+                }
+                if (value === "FL BCPNN sentiment") return "FL BCPNN sentiment";
                 return value;
               }}
             />
@@ -291,12 +324,26 @@ export default function AssetChart({ ticker, days: initialDays = 30 }: AssetChar
               yAxisId="sentiment" 
               type="monotone" 
               dataKey="sentiment" 
-              name="Sentiment" 
+              name="FinBERT sentiment" 
               stroke="#22D3EE" 
               strokeWidth={2.5}
               dot={false}
               activeDot={{ r: 6, stroke: '#22D3EE', strokeWidth: 1, fill: '#22D3EE' }}
             />
+            {hasUc2Line && (
+              <Line
+                yAxisId="sentiment"
+                type="monotone"
+                dataKey="sentimentFl"
+                name="FL BCPNN sentiment"
+                stroke="#F59E0B"
+                strokeWidth={2}
+                strokeDasharray="4 3"
+                connectNulls={false}
+                dot={false}
+                activeDot={{ r: 5, stroke: "#F59E0B", strokeWidth: 1, fill: "#F59E0B" }}
+              />
+            )}
             <Area
               yAxisId="price"
               type="monotone"

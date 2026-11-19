@@ -41,6 +41,10 @@ services:
       - XAI_API_PATH=${XAI_API_PATH:-/analyze}
       - XAI_API_TIMEOUT=${XAI_API_TIMEOUT:-30}
       - XAI_USE_MOCK=${XAI_USE_MOCK:-true}
+      # Optional UC2 federated sentiment (second chart line); leave empty to keep FinBERT-only
+      - UC2_SENTIMENT_URL=${UC2_SENTIMENT_URL:-}
+      - UC2_SENTIMENT_TIMEOUT=${UC2_SENTIMENT_TIMEOUT:-30}
+      - UC2_SENTIMENT_ENABLED=${UC2_SENTIMENT_ENABLED:-true}
       # Comma-separated browser origins when API is on a different domain than the UI
       - CORS_ORIGINS=${CORS_ORIGINS:-}
     restart: unless-stopped
@@ -51,6 +55,43 @@ services:
       retries: 5
       # Uvicorn starts immediately; post_start (data + DeepVaR) runs in background.
       start_period: 120s
+    networks:
+      - alphavision-network
+
+  # Optional: UC2 federated BCPNN sentiment (GPU). Enable with:
+  #   docker compose --profile uc2 up -d
+  # and set UC2_SENTIMENT_URL=http://uc2-sentiment:8092 on the backend.
+  # Download a model into ./external-consumer/uc2-sentiment/models first (see README).
+  uc2-sentiment:
+    profiles: ["uc2"]
+    build:
+      context: ./external-consumer/uc2-sentiment
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${UC2_BASE_IMAGE:-registry.unparallel.pt/extra-brain/fl-platform-bcpnn-client:uc2-sentiment-v1}
+    volumes:
+      - ./external-consumer/uc2-sentiment/models:/consumer/models
+    environment:
+      - UC2_MODELS_DIR=/consumer/models
+      - BCPNN_SENTIMENT_EXTENSION_DIR=/opt/bcpnn-runtime
+      - UC2_NO_HIDDEN_NOISE=${UC2_NO_HIDDEN_NOISE:-true}
+    ports:
+      - "8092:8092"
+    # Uncomment when a CUDA GPU is available:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8092/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     networks:
       - alphavision-network
 

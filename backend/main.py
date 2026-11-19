@@ -16,7 +16,17 @@ import asyncio
 import httpx
 
 from article_ids import article_storage_id, find_article_in_news_data
-from xai_client import XAIClientError, fetch_xai_explanation, is_xai_configured
+from xai_client import (
+    XAIClientError,
+    fetch_xai_explanation,
+    is_xai_configured,
+    is_xai_external,
+)
+from uc2_sentiment_client import (
+    is_uc2_sentiment_configured,
+    mean_scores_for_article_groups,
+    uc2_sentiment_available,
+)
 
 # Configuration: Rolling window size for VaR backtesting (default: 252 trading days = 1 year)
 VAR_ROLLING_WINDOW_DAYS = int(os.getenv('VAR_ROLLING_WINDOW_DAYS', '252'))
@@ -231,70 +241,83 @@ def get_latest_deepvar_for_ticker(ticker: str) -> Dict[str, float]:
     return deepvar_results_cache[ticker][latest_date]
 
 
-def generate_xai_insights(title: str, content: str, sentiment: float, lime_words: List[Dict[str, Any]]) -> str:
+async def generate_xai_insights(
+    title: str,
+    content: str,
+    sentiment: float,
+    lime_words: List[Dict[str, Any]],
+) -> str:
     """
-    Generate human-centric XAI insights using OpenAI GPT
+    Generate human-centric XAI insights using OpenAI, grounded in LIME word scores.
+    Returns empty string when OpenAI is not configured or the call fails.
     """
     if not OPENAI_API_KEY:
-        return "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable."
-    
+        return ""
+    if not lime_words:
+        return ""
+
     try:
-        # Prepare the prompt for GPT
-        top_words = sorted(lime_words, key=lambda x: abs(x['limeValue']), reverse=True)[:10]
-        word_analysis = "\n".join([
-            f"- '{word['word']}': {word['limeValue']:.3f} (importance: {word['importance']:.2f})"
-            for word in top_words
-        ])
-        
-        prompt = f"""
-        As a financial analyst, provide human-centric insights about this news article's sentiment analysis:
+        top_words = sorted(
+            lime_words, key=lambda x: abs(float(x.get("limeValue", 0))), reverse=True
+        )[:10]
+        word_analysis = "\n".join(
+            [
+                f"- '{word['word']}': {float(word['limeValue']):.3f} "
+                f"(importance: {float(word.get('importance', 0)):.2f})"
+                for word in top_words
+            ]
+        )
 
-        Article Title: {title}
-        Overall Sentiment Score: {sentiment:.3f}
-        
-        Top 10 Most Influential Words and Their XAI Values:
-        {word_analysis}
+        excerpt = (content or title or "")[:800]
+        prompt = f"""As a financial analyst, provide human-centric insights about this news article's sentiment analysis:
 
-        Please provide:
-        1. A brief explanation of why this article has this sentiment score
-        2. Key factors that contributed to the sentiment (positive/negative/neutral)
-        3. Market implications based on the sentiment
-        4. What investors should pay attention to
-        5. Any potential risks or opportunities highlighted
+Article Title: {title}
+Article excerpt: {excerpt}
+Overall Sentiment Score: {sentiment:.3f}
 
-        Keep the response concise, professional, and focused on actionable insights for financial decision-making.
-        """
+Top 10 Most Influential Words and Their XAI (LIME) Values:
+{word_analysis}
+
+Please provide:
+1. A brief explanation of why this article has this sentiment score
+2. Key factors that contributed to the sentiment (positive/negative/neutral)
+3. Market implications based on the sentiment
+4. What investors should pay attention to
+5. Any potential risks or opportunities highlighted
+
+Keep the response concise, professional, and focused on actionable insights for financial decision-making."""
 
         headers = {
             "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
-        
         data = {
-            "model": "gpt-3.5-turbo",
+            "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a financial analyst specializing in sentiment analysis and market insights. Provide clear, actionable insights based on news sentiment data."
+                    "content": (
+                        "You are a financial analyst specializing in sentiment analysis "
+                        "and market insights. Provide clear, actionable insights based on "
+                        "news sentiment and word-level XAI (LIME) attributions."
+                    ),
                 },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
+                {"role": "user", "content": prompt},
             ],
             "max_tokens": 500,
-            "temperature": 0.7
+            "temperature": 0.7,
         }
-        
-        response = requests.post(OPENAI_API_URL, headers=headers, json=data, timeout=30)
-        response.raise_for_status()
-        
-        result = response.json()
-        return result['choices'][0]['message']['content'].strip()
-        
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(OPENAI_API_URL, headers=headers, json=data)
+            response.raise_for_status()
+            result = response.json()
+
+        return result["choices"][0]["message"]["content"].strip()
+
     except Exception as e:
-        print(f"OpenAI API error: {e}")
-        return f"Unable to generate AI insights. Error: {str(e)}"
+        print(f"OpenAI XAI insights error: {e}")
+        return ""
 
 def calculate_parametric_var(returns: pd.Series, confidence_level: float = 0.95) -> float:
     """
@@ -1241,9 +1264,14 @@ def _build_data_meta() -> Dict[str, Any]:
         "neuromorphic_active": False,
         "build_sha": build_sha,
         "xai_api_configured": is_xai_configured(),
-        "xai_provider": "external" if is_xai_configured() else None,
+        "xai_provider": (
+            "external" if is_xai_external() else ("mock" if is_xai_configured() else None)
+        ),
         "chat_configured": bool(OPENAI_API_KEY),
         "llm_provider": "openai" if OPENAI_API_KEY else None,
+        "uc2_sentiment_configured": is_uc2_sentiment_configured(),
+        # Live probe filled in GET /api/meta (async); sync callers leave False.
+        "uc2_sentiment_available": False,
     }
 
     if price_data is not None and len(price_data.index) > 0:
@@ -1302,7 +1330,12 @@ async def get_data_meta():
     """
     if price_data is None:
         raise HTTPException(status_code=503, detail="Data not loaded")
-    return _build_data_meta()
+    meta = _build_data_meta()
+    if is_uc2_sentiment_configured() and await uc2_sentiment_available():
+        meta["uc2_sentiment_available"] = True
+        if "uc2_bcpnn_sentiment" not in meta["engines"]:
+            meta["engines"].append("uc2_bcpnn_sentiment")
+    return meta
 
 
 @app.get("/health")
@@ -1339,7 +1372,11 @@ async def get_stock_price_history(
     ticker: str,
     days: int = Query(30, ge=1, le=365, description="Number of days to retrieve")
 ):
-    """Get price history for a specific stock"""
+    """Get price history for a specific stock.
+
+    ``sentiment`` is FinBERT (unchanged). Optional ``sentimentFl`` is the UC2
+    federated BCPNN score when UC2_SENTIMENT_URL is available.
+    """
     if price_data is None:
         raise HTTPException(status_code=500, detail="Data not loaded")
     
@@ -1358,8 +1395,11 @@ async def get_stock_price_history(
     # Filter to the last N days from the latest available date
     recent_data = stock_data[stock_data.index >= start_date]
     
+    use_uc2 = await uc2_sentiment_available()
+
     # Convert to the format expected by frontend
     price_history = []
+    day_articles: List[Optional[List[dict]]] = []
     ticker_key = f"{ticker}.US"
     # Also check BRK-B.US for BRK.B (legacy Finnhub format)
     alt_ticker_key = "BRK-B.US" if ticker == "BRK.B" else None
@@ -1367,7 +1407,8 @@ async def get_stock_price_history(
         sentiment = 0.0
         volume = 0
         date_str = date.strftime("%Y-%m-%d")
-        
+        articles_for_day: Optional[List[dict]] = None
+
         if date_str in news_data:
             stock_news = news_data[date_str]
             news_key = ticker_key if ticker_key in stock_news else (
@@ -1379,19 +1420,31 @@ async def get_stock_price_history(
                     sentiments = [article.get("sentiment", 0.0) for article in articles]
                     sentiment = sum(sentiments) / len(sentiments) if sentiments else 0.0
                     volume = len(articles)
-        
+                    articles_for_day = articles
+
+        day_articles.append(articles_for_day)
         price_history.append({
             "date": date_str,
             "price": float(price),
             "sentiment": float(sentiment),
-            "volume": int(volume)
+            "volume": int(volume),
         })
+
+    if use_uc2 and any(day_articles):
+        fl_scores = await mean_scores_for_article_groups(day_articles)
+        for i, fl_score in enumerate(fl_scores):
+            if fl_score is not None:
+                price_history[i]["sentimentFl"] = float(fl_score)
     
     # Apply 5-day rolling average to smooth sentiment (avoids flat line when news is sparse)
     if price_history:
         df = pd.DataFrame(price_history)
         df["sentiment"] = df["sentiment"].rolling(window=5, center=True, min_periods=1).mean()
-        price_history = df.to_dict("records")
+        if "sentimentFl" in df.columns:
+            df["sentimentFl"] = df["sentimentFl"].rolling(
+                window=5, center=True, min_periods=1
+            ).mean()
+        price_history = df.replace({np.nan: None}).to_dict("records")
     
     return {"priceHistory": price_history}
 
@@ -1979,8 +2032,10 @@ async def get_lime_analysis(
     """
     Word-level XAI explanation for a news article (on demand).
 
-    Sentiment score comes from FinBERT at ingest time. Explanations are fetched
-    from the external XAI service when XAI_API_URL is configured.
+    Sentiment score comes from FinBERT at ingest time. Explanations (LIME words)
+    are fetched from the external XAI service when XAI_API_URL is configured
+    (or mock when XAI_USE_MOCK=true). Narrative AI Assistant insights are then
+    generated via OpenAI using those XAI results when OPENAI_API_KEY is set.
     """
     if news_data is None:
         raise HTTPException(status_code=500, detail="News data not loaded")
@@ -1998,12 +2053,23 @@ async def get_lime_analysis(
     except XAIClientError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
 
+    lime_words = xai_result.get("limeWords", [])
+    xai_insights = (xai_result.get("aiInsights") or "").strip()
+    # Dev mock placeholder must not appear as "AI-Generated Insights".
+    if xai_insights.lower().startswith("mock xai") or "MOCK_XAI" in xai_insights:
+        xai_insights = ""
+
+    # Prefer OpenAI narrative grounded in LIME attributions; fall back to XAI text.
+    ai_insights = await generate_xai_insights(title, content, sentiment, lime_words)
+    if not ai_insights:
+        ai_insights = xai_insights
+
     return {
         "title": title,
         "content": content,
-        "limeWords": xai_result.get("limeWords", []),
+        "limeWords": lime_words,
         "overallSentiment": sentiment,
-        "aiInsights": xai_result.get("aiInsights", ""),
+        "aiInsights": ai_insights,
     }
 
 

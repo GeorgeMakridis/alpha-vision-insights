@@ -13,6 +13,8 @@ export interface PriceHistoryItem {
   date: string;
   price: number;
   sentiment: number;
+  /** Optional UC2 federated BCPNN sentiment (−1…1); omitted when service unavailable */
+  sentimentFl?: number | null;
   volume: number;
 }
 
@@ -88,6 +90,8 @@ export interface DataMeta {
   xai_provider?: string | null;
   chat_configured?: boolean;
   llm_provider?: string | null;
+  uc2_sentiment_configured?: boolean;
+  uc2_sentiment_available?: boolean;
 }
 
 export interface MarketSummary {

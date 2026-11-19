@@ -28,8 +28,18 @@ export const disclaimerSections: LegalSection[] = [
       "Deep VaR uses a machine-learning model (DeepAR). Outputs are estimates, not forecasts guaranteed to be accurate.",
       "News sentiment uses FinBERT (AI). Scores may be wrong, biased, or misaligned with human judgment.",
       "The risk chatbot uses a large language model (LLM). It may hallucinate facts and must not be treated as advice.",
-      "LIME explanations are post-hoc approximations and may not fully represent model behavior.",
+      "LIME / external XAI explanations are post-hoc approximations and may not fully represent model behavior.",
       "Parametric and Monte Carlo VaR rely on historical return assumptions that may not hold in the future.",
+      "Optional partner VaR services (e.g. BCPNN) are model estimates with documented limitations; read any warnings returned by the API.",
+    ],
+  },
+  {
+    id: "trustworthy-ai",
+    title: "Trustworthy AI (context of use)",
+    paragraphs: [
+      "Following the EU HLEG Trustworthy AI Guidelines, trustworthiness concerns the AI system in its overall context of use — people, data, organisational oversight, and impact — not only technical properties of a model.",
+      "We may document model-level evidence that supports trustworthiness (e.g. backtests, methodology, known failure modes). We do not claim that any model or the dashboard is unconditionally trustworthy regardless of how it is used.",
+      "Human oversight remains with the user and their organisation. Outputs are informational and educational only.",
     ],
   },
   {

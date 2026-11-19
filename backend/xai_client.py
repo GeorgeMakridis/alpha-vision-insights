@@ -24,6 +24,11 @@ class XAIClientError(Exception):
 
 
 def is_xai_configured() -> bool:
+    """True when an external XAI URL is set, or local mock is enabled for dev."""
+    return bool(XAI_API_URL) or XAI_USE_MOCK
+
+
+def is_xai_external() -> bool:
     return bool(XAI_API_URL)
 
 
@@ -85,9 +90,12 @@ async def fetch_xai_explanation(
     Raises XAIClientError if not configured (and mock disabled) or request fails.
     """
     if not is_xai_configured():
-        if XAI_USE_MOCK:
-            return _mock_explanation(content, sentiment)
-        raise XAIClientError("XAI_API_URL is not configured")
+        raise XAIClientError(
+            "XAI_API_URL is not configured (set XAI_API_URL or XAI_USE_MOCK=true for local dev)"
+        )
+
+    if not XAI_API_URL:
+        return _mock_explanation(content, sentiment)
 
     path = XAI_API_PATH if XAI_API_PATH.startswith("/") else f"/{XAI_API_PATH}"
     url = f"{XAI_API_URL}{path}"
@@ -137,7 +145,6 @@ def _mock_explanation(content: str, sentiment: float) -> Dict[str, Any]:
         )
     return {
         "limeWords": lime_words[:25],
-        "aiInsights": (
-            "Mock XAI (XAI_USE_MOCK=true). Configure XAI_API_URL for production explanations."
-        ),
+        # Narrative insights come from OpenAI in lime-analysis; keep mock silent here.
+        "aiInsights": "",
     }

@@ -44,6 +44,7 @@ export const methodologySections: LegalSection[] = [
     paragraphs: [
       "New articles are scored with FinBERT (ProsusAI/finbert) when available; otherwise a keyword fallback may apply.",
       "Scores range roughly from -1 (negative) to +1 (positive). AI may misclassify headlines.",
+      "Optional second series on the price chart: UC2 federated BCPNN sentiment (Extra Brain FL platform), served by the uc2-sentiment Docker service when UC2_SENTIMENT_URL is set and a downloaded model is available. FinBERT remains the primary ingest score and is never replaced.",
     ],
   },
   {
@@ -64,14 +65,33 @@ export const methodologySections: LegalSection[] = [
     ],
   },
   {
+    id: "bcpnn",
+    title: "BCPNN / partner VaR (optional external service)",
+    paragraphs: [
+      "When integrated, AlphaVision may call a partner VaR endpoint (POST with daily returns, API key authentication). Forecasts typically use a fixed lookback (e.g. 252 trading days).",
+      "Partner OOS evaluation has shown reasonable pooled coverage with documented limitations: weaker per-ticker calibration, incomplete volatility scaling across calm vs volatile names, and a finite return-grid edge (warnings field).",
+      "Deep VaR in this dashboard is motivated in part by improving adaptation to each name’s volatility regime relative to models that under-cover more volatile tickers.",
+    ],
+  },
+  {
+    id: "trustworthy-ai",
+    title: "Trustworthy AI assessment (HLEG)",
+    paragraphs: [
+      "Assessment is tailored to this research / educational use case. Model-level evidence (backtests, Kupiec tables, methodology, known failure modes) supports trustworthiness claims but does not make the system unconditionally trustworthy in every deployment context.",
+      "Human agency, accountability, and organisational arrangements remain outside the model weights: users must not treat outputs as automated investment decisions.",
+      "Privacy and data governance for integrated third parties (OpenAI, XAI, partner VaR hosts) are described under /privacy and the operator deployment checklist.",
+    ],
+  },
+  {
     id: "limitations",
     title: "Known limitations",
     list: [
       "Past performance and backtests do not predict future results.",
       "Corporate actions, delistings, and symbol changes may cause gaps.",
-      "BLNN VaR may show as zero if not connected to an external service.",
+      "BLNN / BCPNN VaR may be unavailable if the external service is not connected.",
       "First load may serve cached metrics until background refresh completes.",
       "XAI explanations depend on the external provider; they are not FinBERT attributions.",
+      "Volatility scaling and per-ticker coverage can be weaker than pooled metrics suggest — see partner OOS notes and Deep VaR motivation.",
     ],
   },
 ];

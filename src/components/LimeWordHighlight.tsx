@@ -226,17 +226,20 @@ export default function LimeWordHighlight({
             </div>
           </div>
 
-          {/* AI-Generated Insights */}
+          {/* AI-Generated Insights: light panel + forced dark text (avoids inheriting modal foreground) */}
           {aiInsights && (
             <div>
               <h3 className="font-semibold text-sm text-muted-foreground mb-2">AI-Generated Insights</h3>
-              <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200 text-slate-900">
                 <div className="flex items-start gap-2 mb-2">
                   <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 flex-shrink-0"></div>
-                  <div className="text-sm leading-relaxed">
+                  <div className="text-sm leading-relaxed text-slate-900">
                     {aiInsights.split('\n').map((line, index) => (
-                      <p key={index} className="mb-2 last:mb-0">
-                        {line}
+                      <p
+                        key={index}
+                        className="mb-2 last:mb-0 text-slate-900 whitespace-pre-wrap break-words"
+                      >
+                        {line || '\u00A0'}
                       </p>
                     ))}
                   </div>

@@ -28,6 +28,9 @@ services:
       - XAI_API_PATH=${XAI_API_PATH:-/analyze}
       - XAI_API_TIMEOUT=${XAI_API_TIMEOUT:-30}
       - XAI_USE_MOCK=${XAI_USE_MOCK:-true}
+      - UC2_SENTIMENT_URL=${UC2_SENTIMENT_URL:-}
+      - UC2_SENTIMENT_TIMEOUT=${UC2_SENTIMENT_TIMEOUT:-30}
+      - UC2_SENTIMENT_ENABLED=${UC2_SENTIMENT_ENABLED:-true}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
     restart: unless-stopped
     command: ["uvicorn", "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
